@@ -21,7 +21,7 @@ char par_receive[10];
 if (fork()==0){
     close(ping[1]);
     read(ping[0],son_receive,strlen(par_send));
-    printf("%d:received %s\n",getpid(),son_receive);
+    printf("%d: received %s\n",getpid(),son_receive);
     close(ping[0]);
     close(pong[0]);
     write(pong[1],son_send,strlen(son_send));
@@ -34,7 +34,7 @@ else{
     close(pong[1]);
     read(pong[0],par_receive,strlen(son_send));
     close(pong[0]);
-    printf("%d:received %s\n",getpid(),par_receive);
+    printf("%d: received %s\n",getpid(),par_receive);
 }
 
 exit(0);

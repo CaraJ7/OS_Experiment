@@ -23,6 +23,8 @@
 
    `..` 表示上一级的目录
 
+   `\xxx`表示根目录，就是最上面的那个目录
+
 6. 复制 `cp`
 
    `cp source destination`，例如`cp ./hello ..`把当前目录下的hello拷贝到上一级目录上
@@ -89,4 +91,22 @@
 
     `ls | wc -l`
 
-    前面写后面读，管道本质上就是一个文件
+    前面写后面读，管道本质上就是一个文件	
+
+15. 传递参数`xargs`
+
+    用于将前一条指令的输出传递给`xargs`后面的指令，当做输入的参数。并且，如果这个输出是用空格/回车隔开的，那么是将每一个输出都当做一次参数的传递，`xargs`每次对其中的**每一个**逐个执行(在linux中，这是在`xargs`命令后面设置了`-n 1`的情况）。例：
+
+    `find . b | xargs grep hello`
+
+    will run "grep hello" on each file named b in the directories below "."
+
+    ```shell
+    $ echo "1\n2" | xargs echo line
+    line 1
+    line 2
+    ```
+
+​    
+
+​    

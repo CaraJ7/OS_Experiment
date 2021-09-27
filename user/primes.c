@@ -1,5 +1,5 @@
-#include"./user.h"
-#include"../kernel/types.h"
+#include"user.h"
+#include"kernel/types.h"
 
 #define N 40
 
@@ -15,7 +15,7 @@ void find_prime(int read_end,int read_num){
     read(read_end,num,read_num*sizeof(int));
     close(read_end);
     smallest_prime=num[0];
-    printf("prime %d",smallest_prime);
+    printf("prime %d\n",smallest_prime);
     for(int i=1;i<read_num;i++){
         if((num[i]%smallest_prime)!=0){
             remain++;
