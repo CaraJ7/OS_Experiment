@@ -1,7 +1,7 @@
-#include "kernel/types.h"
-#include "kernel/stat.h"
-#include "user/user.h"
-#include "kernel/fs.h"
+#include "../kernel/types.h"
+#include "../kernel/stat.h"
+#include "user.h"
+#include "../kernel/fs.h"
 
 char*
 fmtname(char *path)
@@ -58,6 +58,9 @@ ls(char *path)
     while(read(fd, &de, sizeof(de)) == sizeof(de)){
       if(de.inum == 0)
         continue;
+      if((strcmp(de.name,".")==0) || (strcmp(de.name,"..")==0)){
+        continue;
+      }
       memmove(p, de.name, DIRSIZ);
       p[DIRSIZ] = 0;
       if(stat(buf, &st) < 0){ // stat:Place info about a named file into *st

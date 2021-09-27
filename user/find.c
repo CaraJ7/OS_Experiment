@@ -65,6 +65,7 @@ void find_file(char* path,char* target_name){
             if(de.inum == 0)
                 continue;
             // 把文件名字加进来，递归
+            p = buf+strlen(buf)+1;
             memmove(p, de.name, DIRSIZ);
             p[DIRSIZ] = 0;
             find_file(buf,target_name);
@@ -72,11 +73,17 @@ void find_file(char* path,char* target_name){
     return;
 
     }
+    return;
 }
 
-int main(int argc,char* argv[]){
+// int main(int argc,char* argv[]){
+int main(){
+
+    int argc=2;
+    char* argv[2]={".","kill"};
+
     if(argc<2){
-        printf("Need a path and a filename!");
+        printf("Need a path and a filename!\n");
         exit(0);
     }
 
