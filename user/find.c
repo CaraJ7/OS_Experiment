@@ -85,15 +85,12 @@ void find_file(char* path,char* target_name){
 // int main(int argc,char* argv[]){
 int main(int argc,char* argv[]){
 
-
     if(argc<2){
         printf("Need a path and a filename!\n");
         exit(0);
     }
 
     find_file(argv[1],argv[2]);
-
-
 
     exit(0);
 }
