@@ -14,9 +14,9 @@ pipe(ping);
 pipe(pong);
 
 char* son_send="pong";
-char son_receive[10];
+char son_receive[10]={0};
 char* par_send="ping";
-char par_receive[10];
+char par_receive[10]={0};
 
 if (fork()==0){
     close(ping[1]);
