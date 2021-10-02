@@ -54,9 +54,9 @@ int main(int argc,char* argv[]){
     // params is an array of MAXARG pointers to char
     // must use a malloc to allocate memory
     char **params;
-    params = malloc(MAXARG * sizeof(char*));
+    params = (char**)malloc(MAXARG * sizeof(char*));
     for (int i = 0; i < MAXARG; i++)
-        params[i] = malloc((MAX_LENGTH+1) * sizeof(char));
+        params[i] = (char*)malloc((MAX_LENGTH+1) * sizeof(char));
 
 
     // 为什么一定要fork——因为exec直接自己结束了，除非出错
