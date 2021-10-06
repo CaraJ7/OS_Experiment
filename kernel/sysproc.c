@@ -6,6 +6,10 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
+
+uint64 get_free_mem(void);
+uint64 get_used_proc(void);
 
 uint64
 sys_exit(void)
@@ -38,6 +42,7 @@ sys_wait(void)
   return wait(p);
 }
 
+// 给当前的进程增长n个bytes的内存.如果成功,返回增长之前的占有量;如果失败,返回-1
 uint64
 sys_sbrk(void)
 {
@@ -94,4 +99,34 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+// trace the asked process
+uint64
+sys_trace(void)
+{
+  int trace_mask;
+  struct proc *p = myproc();
+  if(argint(0,&trace_mask)<0){
+    return -1;
+  }
+  p->trace_mask = trace_mask;
+  return 0;
+}
+
+uint64
+sys_sysinfo(void)
+{
+  struct proc *p = myproc();
+  struct sysinfo p_kernel;
+  uint64 p_user;
+  p_kernel.freemem = get_free_mem();
+  p_kernel.nproc = get_used_proc();
+  if(argaddr(0,&p_user)<0){
+    return -1;
+  }
+
+  if(copyout(p->pagetable, p_user, (char *)&p_kernel, sizeof(struct sysinfo)) < 0)
+      return -1;
+  return 0;
 }

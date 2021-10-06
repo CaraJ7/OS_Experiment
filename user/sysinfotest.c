@@ -18,7 +18,7 @@ sinfo(struct sysinfo *info) {
 int
 countfree()
 {
-  uint64 sz0 = (uint64)sbrk(0);
+  uint64 sz0 = (uint64)sbrk(0);//得到当前进程的内存占有量
   struct sysinfo info;
   int n = 0;
 

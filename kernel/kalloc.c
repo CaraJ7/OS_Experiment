@@ -23,6 +23,9 @@ struct {
   struct run *freelist;
 } kmem;
 
+#define WHOLE_FREE_MEM (PHYSTOP-(uint64)end)
+uint64 Used_mem;//整个RAM的大小减去内核的代码和数据
+
 void
 kinit()
 {
@@ -56,6 +59,10 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
+  //释放了，空间变大
+  if(Used_mem!=0)
+    Used_mem-=PGSIZE;
+
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
@@ -78,5 +85,21 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+    
+  //占用了，空间变小
+  if(r){
+      // printf("used\n");
+    Used_mem+=PGSIZE;
+    // printf("left %d\n",free_mem);
+  }
+
   return (void*)r;
+}
+
+uint64
+get_free_mem(void){
+  uint64 free_mem;
+  free_mem = WHOLE_FREE_MEM - Used_mem;
+  printf("now %d\n",free_mem);
+  return free_mem;
 }

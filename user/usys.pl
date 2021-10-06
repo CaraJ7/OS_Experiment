@@ -14,7 +14,7 @@ sub entry {
     print " ecall\n";
     print " ret\n";
 }
-	
+# 这里用来生成汇编，把具体哪一个系统调用的标号存到a7里面去,内核再根据这个执行对应的指令
 entry("fork");
 entry("exit");
 entry("wait");
@@ -36,3 +36,5 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+entry("trace");
+entry("sysinfo");

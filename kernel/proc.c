@@ -21,6 +21,9 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
+// sysinfo 使用，记录不是Unused的进程的个数
+static uint64 proc_num;
+
 // initialize the proc table at boot time.
 void
 procinit(void)
@@ -150,6 +153,9 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+
+  //sysinfo使用，每次free了就减一个
+  proc_num--;
 }
 
 // Create a user page table for a given process,
@@ -277,6 +283,8 @@ fork(void)
 
   np->parent = p;
 
+  np->trace_mask = p->trace_mask; // fork的时候传递trace_mask
+
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -296,6 +304,9 @@ fork(void)
   np->state = RUNNABLE;
 
   release(&np->lock);
+
+  //sysinfo使用，每次free了就减一个
+  proc_num++;
 
   return pid;
 }
@@ -692,4 +703,9 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int
+get_used_proc(void){
+  return proc_num;
 }
