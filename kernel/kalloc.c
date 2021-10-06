@@ -100,6 +100,5 @@ uint64
 get_free_mem(void){
   uint64 free_mem;
   free_mem = WHOLE_FREE_MEM - Used_mem;
-  printf("now %d\n",free_mem);
   return free_mem;
 }
