@@ -305,7 +305,7 @@ fork(void)
 
   release(&np->lock);
 
-  //sysinfo使用，每次free了就减一个
+  //sysinfo使用，每次fork就加一个
   proc_num++;
 
   return pid;
