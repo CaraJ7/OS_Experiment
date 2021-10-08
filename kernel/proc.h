@@ -103,4 +103,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  pagetable_t ppk_pagetable;//加了一个进程在内核时的pagetable,ppk指per process kernel
 };

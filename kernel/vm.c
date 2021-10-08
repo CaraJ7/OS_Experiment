@@ -47,6 +47,42 @@ kvminit()
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 }
 
+/*
+ * 建立一个kernel page table，为每个进程创建
+ * ppk指per process kernel
+ */
+pagetable_t
+ppk_kvminit()
+{
+  pagetable_t ppk_pagetable;
+  ppk_pagetable = (pagetable_t) kalloc();
+  memset(ppk_pagetable, 0, PGSIZE);
+
+  // uart registers
+  ppk_kvmmap(ppk_pagetable,UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  ppk_kvmmap(ppk_pagetable,VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // CLINT
+  ppk_kvmmap(ppk_pagetable,CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // PLIC
+  ppk_kvmmap(ppk_pagetable,PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  // map kernel text executable and read-only.
+  ppk_kvmmap(ppk_pagetable,KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
+  // map kernel data and the physical RAM we'll make use of.
+  ppk_kvmmap(ppk_pagetable,(uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  ppk_kvmmap(ppk_pagetable,TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+
+  return ppk_pagetable;
+}
+
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
 void
@@ -119,6 +155,29 @@ kvmmap(uint64 va, uint64 pa, uint64 sz, int perm)
 {
   if(mappages(kernel_pagetable, va, sz, pa, perm) != 0)
     panic("kvmmap");
+}
+
+// 修改上面的函数，使其改变的是新的页表,多了一个参数
+// only used when booting.
+// does not flush TLB or enable paging.
+void
+ppk_kvmmap(pagetable_t pagetable,uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if(mappages(pagetable, va, sz, pa, perm) != 0)
+    panic("ppk_kvmmap");
+}
+
+// 根据这个进程原来内核栈的虚拟地址和每个进程自己的新的内核的页表，
+// 将这个进程的内核栈映射到自己的新的内核页表上
+// 改自walkaddr
+void
+ppk_mapkernelstack(pagetable_t ppk_pagetable,uint64 va){
+  pte_t *pte;
+  uint64 pa;
+  pte = walk(kernel_pagetable, va, 0);
+  pa = PTE2PA(*pte);// physical address of kernel stack
+  ppk_kvmmap(ppk_pagetable,va,pa, PGSIZE, PTE_R | PTE_W);
+  return;
 }
 
 // translate a kernel virtual address to
@@ -289,13 +348,32 @@ freewalk(pagetable_t pagetable)
   kfree((void*)pagetable);
 }
 
+// 改自上面的函数，清空页表，但是不清空其下的子节点
+void
+ppk_freewalk(pagetable_t pagetable)
+{
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      ppk_freewalk((pagetable_t)child);
+      pagetable[i] = 0;
+    } 
+  }
+  kfree((void*)pagetable);
+}
+
 // Free user memory pages,
 // then free page-table pages.
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
   if(sz > 0)
+    // 先从虚拟地址的0开始，free掉除最顶层的tramxxx那两页
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  // 再去free掉页表
   freewalk(pagetable);
 }
 

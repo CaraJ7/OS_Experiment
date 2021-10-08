@@ -37,7 +37,7 @@ procinit(void)
       char *pa = kalloc();
       if(pa == 0)
         panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
+      uint64 va = KSTACK((int) (p - proc));// 这里是1，2，3。并不是实际的地址偏移量
       kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
       p->kstack = va;
   }
@@ -96,7 +96,7 @@ allocproc(void)
 
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
-    if(p->state == UNUSED) {
+    if(p->state == UNUSED) { //有一个进程的数组，没用上的就是unused的
       goto found;
     } else {
       release(&p->lock);
@@ -121,6 +121,17 @@ found:
     return 0;
   }
 
+  // 为新的进程配置kernel page table
+  p->ppk_pagetable = ppk_kvminit();
+  if(p->pagetable == 0){
+    printf("fail to allocate ppk-pagetable\n");
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+    // 同时，将这个进程原来的内核栈映射到这个新的kernel page table里
+  ppk_mapkernelstack(p->ppk_pagetable,p->kstack);
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -139,8 +150,27 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  //清空这个进程的内核页表
+  /*
+  emmm 我觉得理论上应该先把ppk的free掉才可以去free整个页表
+  但事实上顺序无所谓emmmm(至少可以执行指令)
+
+  经过一番考证与推测,事实上这个proc的数量是确定的，他们已经全部放在了内核的空间里面，也就是说这里的free
+  只是free掉了他们的资源，这个proc的结构体相当于他们的PCB，"永远"不会被释放
+  而他们占有的资源只有他们的页表可以告诉他们！
+
+  */
+  if(p->ppk_pagetable){
+    ppk_freewalk(p->ppk_pagetable);
+  }
+  p->ppk_pagetable=0;
+
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+
+
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -473,10 +503,16 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        // 把页表切换到每个进程自己的内核页表.
+        // 可能有问题？不知道是不是移动到了当前的CPU 
+        w_satp(MAKE_SATP(p->ppk_pagetable));
+        sfence_vma();
+
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
+        kvminithart(); // 这个cpu没有进程的时候使用内核自己的表
         c->proc = 0;
 
         found = 1;
