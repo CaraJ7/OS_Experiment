@@ -418,18 +418,21 @@ sys_exec(void)
   char path[MAXPATH], *argv[MAXARG];
   int i;
   uint64 uargv, uarg;
-
+  // 得到第一个参数，存在path里面,是要执行的文件名
+  // 第二个参数的地址，存在uargv里面，是exec输入的参数的地址
   if(argstr(0, path, MAXPATH) < 0 || argaddr(1, &uargv) < 0){
     return -1;
   }
+  // printf("first argument is %s\nsecond argument is %p\n",path,uargv);// 对的，因为没用上copyin,用的是copyinstr
   memset(argv, 0, sizeof(argv));
   for(i=0;; i++){
     if(i >= NELEM(argv)){
       goto bad;
     }
-    if(fetchaddr(uargv+sizeof(uint64)*i, (uint64*)&uarg) < 0){
+    if(fetchaddr(uargv+sizeof(uint64)*i, (uint64*)&uarg) < 0){// fetchaddr 使用了copyin。这里在ls的时候出了问题，uarg拿到的值不对，但是uargv是一样的，说明uargv找的地址不对
       goto bad;
     }
+    // printf("argument %d is %p\n",i,uarg);
     if(uarg == 0){
       argv[i] = 0;
       break;
@@ -437,11 +440,13 @@ sys_exec(void)
     argv[i] = kalloc();
     if(argv[i] == 0)
       goto bad;
-    if(fetchstr(uarg, argv[i], PGSIZE) < 0)
+    if(fetchstr(uarg, argv[i], PGSIZE) < 0) // 用的也是copyinstr
       goto bad;
+    // printf("argument %d is %s\n",i,argv[i]);
   }
 
   int ret = exec(path, argv);
+  // printf("exec returns %d\n",ret);
 
   for(i = 0; i < NELEM(argv) && argv[i] != 0; i++)
     kfree(argv[i]);
@@ -449,6 +454,7 @@ sys_exec(void)
   return ret;
 
  bad:
+  // printf("bad in sysfile.Might be wrong of copyinstr\n");
   for(i = 0; i < NELEM(argv) && argv[i] != 0; i++)
     kfree(argv[i]);
   return -1;

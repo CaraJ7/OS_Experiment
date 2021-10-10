@@ -9,9 +9,16 @@
 
 static int loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
 
+// 从vm中来的，用于将用户态同时映射到内核态
+void
+user_mapto_kernel
+(pagetable_t user_pagetable,pagetable_t ppk_pagetable,uint64 sz,uint64 before_sz,int substitution,int perm);
+
+
 int
 exec(char *path, char **argv)
 {
+  // printf("exec start\n");
   char *s, *last;
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG+1], stackbase;
@@ -66,7 +73,7 @@ exec(char *path, char **argv)
 
   // Allocate two pages at the next page boundary.
   // Use the second as the user stack.
-  sz = PGROUNDUP(sz);
+  sz = PGROUNDUP(sz);// 跳到下一个空页上
   uint64 sz1;
   if((sz1 = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
@@ -111,14 +118,26 @@ exec(char *path, char **argv)
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
+  // 在这里重新布置内核pagetable
+  // printf("exec into the map\n exec user_pagetable is %p\n",p->pagetable);
+  user_mapto_kernel(p->pagetable,p->ppk_pagetable,PGROUNDUP(sz),PGROUNDUP(oldsz),2,PTE_W|PTE_R|PTE_X);
+  // map_check(p->pagetable,p->ppk_pagetable,0,PGROUNDUP(sz),1);
+  // printf("exec done\n");
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
+  // vmprint要在第一个进程输出页表
+  if(p->pid==1) {
+    vmprint(p->pagetable);
+    // printf("sizeof the exec process is %p\n",p->sz);
+  }
+
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:
+  printf("exec bad\n");
   if(pagetable)
     proc_freepagetable(pagetable, sz);
   if(ip){

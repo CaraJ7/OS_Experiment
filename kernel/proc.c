@@ -19,6 +19,12 @@ extern void forkret(void);
 static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
 
+// 从vm中来的，用于将用户态同时映射到内核态
+void
+user_mapto_kernel
+(pagetable_t user_pagetable,pagetable_t ppk_pagetable,uint64 sz,uint64 before_sz,int substitution,int perm);
+
+
 extern char trampoline[]; // trampoline.S
 
 // initialize the proc table at boot time.
@@ -123,7 +129,7 @@ found:
 
   // 为新的进程配置kernel page table
   p->ppk_pagetable = ppk_kvminit();
-  if(p->pagetable == 0){
+  if(p->ppk_pagetable == 0){
     printf("fail to allocate ppk-pagetable\n");
     freeproc(p);
     release(&p->lock);
@@ -164,6 +170,7 @@ freeproc(struct proc *p)
   if(p->ppk_pagetable){
     ppk_freewalk(p->ppk_pagetable);
   }
+  // printf("pid%d :ppk_pagetable freed\n",p->pid);
   p->ppk_pagetable=0;
 
 
@@ -250,6 +257,10 @@ userinit(void)
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
+  // printf("userinit into the map\n userinit user_pagetable is %p\n",p->pagetable);
+  user_mapto_kernel(p->pagetable,p->ppk_pagetable,PGROUNDUP(p->sz),0,0,PTE_W|PTE_R|PTE_X);
+  // mappages(p->ppk_pagetable,CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+  // map_check(p->pagetable,p->ppk_pagetable,0,p->sz,2);
 
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
@@ -261,6 +272,8 @@ userinit(void)
   p->state = RUNNABLE;
 
   release(&p->lock);
+
+  // printf("userinit end\n");
 }
 
 // Grow or shrink user memory by n bytes.
@@ -279,7 +292,11 @@ growproc(int n)
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
+  // 新得到的size可能不是page-aligned
+  // printf("growproc into the map\n growproc user_pagetable is %p\n",p->pagetable);
+  user_mapto_kernel(p->pagetable,p->ppk_pagetable,PGROUNDUP(sz),PGROUNDUP(p->sz),1,PTE_W|PTE_R|PTE_X);
   p->sz = sz;
+  // printf("growproc end\n");
   return 0;
 }
 
@@ -288,6 +305,7 @@ growproc(int n)
 int
 fork(void)
 {
+  // printf("fork start\n");
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
@@ -327,6 +345,12 @@ fork(void)
 
   release(&np->lock);
 
+  
+  // printf("fork into the map\n fork user_pagetable is %p\n",np->pagetable);
+  user_mapto_kernel(np->pagetable,np->ppk_pagetable,PGROUNDUP(np->sz),0,0,PTE_W|PTE_R|PTE_X);
+  // map_check(np->pagetable,np->ppk_pagetable,0,PGROUNDUP(np->sz),3);
+
+  // printf("fork end\n");
   return pid;
 }
 

@@ -5,6 +5,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+// #include "proc.h"
 
 /*
  * the kernel's page table.
@@ -65,7 +66,7 @@ ppk_kvminit()
   ppk_kvmmap(ppk_pagetable,VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
 
   // CLINT
-  ppk_kvmmap(ppk_pagetable,CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+  // ppk_kvmmap(ppk_pagetable,CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 
   // PLIC
   ppk_kvmmap(ppk_pagetable,PLIC, PLIC, 0x400000, PTE_R | PTE_W);
@@ -121,6 +122,8 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
       *pte = PA2PTE(pagetable) | PTE_V;
     }
   }
+  // if(va==0x2000000)
+  //   printf("pa address is %p\n",);
   return &pagetable[PX(0, va)];
 }
 
@@ -137,12 +140,15 @@ walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
 
   pte = walk(pagetable, va, 0);
-  if(pte == 0)
-    return 0;
-  if((*pte & PTE_V) == 0)
-    return 0;
-  if((*pte & PTE_U) == 0)
-    return 0;
+  if(pte == 0){
+    printf("pte=0\n");
+    return 0;}
+  if((*pte & PTE_V) == 0){
+    printf("PTE_V=0\n");
+    return 0;}
+  if((*pte & PTE_U) == 0){
+    printf("PTE_U=0\n");
+    return 0;}
   pa = PTE2PA(*pte);
   return pa;
 }
@@ -215,8 +221,12 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
-      panic("remap");
+    if(*pte & PTE_V){
+      printf("pagetable address is %p\nva is %p\npa is %p\n",pagetable,va,pa);
+      printf("already pa is %p\n",PTE2PA(*pte));
+      // panic("remap");
+      printf("remap");
+    }
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -239,8 +249,10 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
-    if((pte = walk(pagetable, a, 0)) == 0)
+    if((pte = walk(pagetable, a, 0)) == 0 ){
+      printf("va is %p\nnpages is %p\na is %p\npagetable is %p\n",va,npages,a,pagetable);
       panic("uvmunmap: walk");
+    }
     if((*pte & PTE_V) == 0)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
@@ -284,17 +296,21 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
 
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
+// 修改，不能长的太大，不能超过PILC
 uint64
 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   char *mem;
   uint64 a;
 
-  if(newsz < oldsz)
+  if(newsz < oldsz || newsz>(PLIC))
     return oldsz;
-
+  // if(newsz>CLINT)
+  //   return -1;
+  // printf("old sz is %p new sz is %p\n",oldsz,newsz);
   oldsz = PGROUNDUP(oldsz);
-  for(a = oldsz; a < newsz; a += PGSIZE){
+  for(a = oldsz; (a < newsz) &&(a<(PLIC)); a += PGSIZE){
+    // printf("a is %p\n",a);
     mem = kalloc();
     if(mem == 0){
       uvmdealloc(pagetable, a, oldsz);
@@ -307,7 +323,10 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
       return 0;
     }
   }
-  return newsz;
+  // if(newsz>PLIC)
+  //   return PLIC;
+  // else
+    return newsz;
 }
 
 // Deallocate user pages to bring the process size from oldsz to
@@ -322,6 +341,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 
   if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
     int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
+    // printf("uvmunmap from uvmdealloc\n");
     uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
   }
 
@@ -330,6 +350,9 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 
 // Recursively free page-table pages.
 // All leaf mappings must already have been removed.
+// gdx,&&最后执行
+//if中的前者是来看这个页表项下面还有没有东西
+//if的后者则是看他的下层是真正存数据的一段还是又一个页表，是根据后面的这三个标志位来看的。
 void
 freewalk(pagetable_t pagetable)
 {
@@ -370,9 +393,11 @@ ppk_freewalk(pagetable_t pagetable)
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
-  if(sz > 0)
+  if(sz > 0){
     // 先从虚拟地址的0开始，free掉除最顶层的tramxxx那两页
+    // printf("uvmunmap from uvmfree\n");
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  }
   // 再去free掉页表
   freewalk(pagetable);
 }
@@ -383,6 +408,8 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
+// 就是完全的拷贝，没有什么花样，就是从父进程的0地址开始一页一页的读
+// 然后请求一端内存，分给子进程
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
@@ -451,29 +478,194 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   return 0;
 }
 
+// 用来把用户态的页表的内容映射到内核态的页表中
+void
+user_mapto_kernel(pagetable_t user_pagetable,pagetable_t ppk_pagetable,uint64 sz,uint64 before_sz,int substitution,int perm){
+/* 之前可用  
+  uint64  pa;
+  pte_t *pte;
+  
+  //sbrk与exec情况，先要把之前在内核上的映射都整没
+  if(substitution==1 && before_sz!=0){
+    // printf("uvmunmap from user_mapto_kernel\n");
+    // printf("before_page size is %d\nnow size is %d\n user pagetable is %p\n",before_sz>>12,sz>>12,user_pagetable);
+    uvmunmap(ppk_pagetable,0,before_sz>>12,0);
+  }
+
+
+  // printf("user_map_to_kernel size is %p\n",sz);
+
+  for(int i=0;i<(sz>>12);i++){
+  // pa = walkaddr(user_pagetable, i<<12);
+    pte = walk(user_pagetable, i<<12, 0);
+    if((pte == 0) || ((*pte & PTE_V) == 0))
+      panic("user_map_to_kernel pte is wrong");
+    pa = PTE2PA(*pte);
+    if(pa == 0){ // pa is not mapped
+      printf("the problem is in %d\n",i);
+      panic("user_mapto_kernel pa not mapped");
+    }
+    if(mappages(ppk_pagetable, i<<12, PGSIZE, pa, perm) != 0)
+        panic("user_mapto_kernel_mappages");
+  }
+  return;
+*/
+  uint64  pa;
+  pte_t *pte;
+  
+  // sbrk减内存
+  if(substitution==1 && (before_sz>sz)){
+    uvmunmap(ppk_pagetable,sz,(before_sz-sz)>>12,0);
+    return;
+  }
+  // exec
+  else if(substitution==2){
+    uvmunmap(ppk_pagetable,0,before_sz>>12,0);
+    for(int i=0;i<(sz>>12);i++){
+  // pa = walkaddr(user_pagetable, i<<12);
+    pte = walk(user_pagetable, i<<12, 0);
+    if((pte == 0) || ((*pte & PTE_V) == 0))
+      panic("user_map_to_kernel pte is wrong");
+    pa = PTE2PA(*pte);
+    if(pa == 0){ // pa is not mapped
+      printf("the problem is in %d\n",i);
+      panic("user_mapto_kernel pa not mapped");
+    }
+    if(mappages(ppk_pagetable, i<<12, PGSIZE, pa, perm) != 0)
+        panic("user_mapto_kernel_mappages");
+    }
+    return;
+  }
+  // else if (substitution==1 && (before_sz<sz))
+  //sbrk与exec情况，先要把之前在内核上的映射都整没
+  // if(substitution==1 && before_sz!=0){
+  //   // printf("uvmunmap from user_mapto_kernel\n");
+  //   // printf("before_page size is %d\nnow size is %d\n user pagetable is %p\n",before_sz>>12,sz>>12,user_pagetable);
+  //   uvmunmap(ppk_pagetable,0,before_sz>>12,0);
+  // }
+
+
+  // printf("user_map_to_kernel size is %p\n",sz);
+
+  for(int i=(PGROUNDUP(before_sz)>>12);i<(PGROUNDUP(sz)>>12);i++){
+  // pa = walkaddr(user_pagetable, i<<12);
+    pte = walk(user_pagetable, i<<12, 0);
+    if((pte == 0) || ((*pte & PTE_V) == 0))
+      panic("user_map_to_kernel pte is wrong");
+    pa = PTE2PA(*pte);
+    if(pa == 0){ // pa is not mapped
+      printf("the problem is in %d\n",i);
+      panic("user_mapto_kernel pa not mapped");
+    }
+    if(mappages(ppk_pagetable, i<<12, PGSIZE, pa, perm) != 0)
+        panic("user_mapto_kernel_mappages");
+  }
+  return;
+}
+
+// 检查是否正确的将用户的地址映射到了内核页表上
+void
+map_check(pagetable_t user_pagetable,pagetable_t ppk_pagetable,uint64 va,uint64 sz,int ifimm){// va没用了
+  // uint64 user_pa;
+  // uint64  ppk_pa;
+  pte_t *user_pte;
+  pte_t *ppk_pte;
+
+  // printf("check user_pagetable is %p, size is %p\n",user_pagetable,sz);
+
+  for(int i=0;i<(sz>>12);i++){
+  user_pte = walk(user_pagetable, i<<(12), 0);
+  if((user_pte == 0) || ((*user_pte & PTE_V) == 0)){
+    printf("the wrong i is %d\nsize is %p\n",i,sz);
+    printf("ifimm is %d\n",ifimm);
+    // panic("map_check 1 is wrong");
+    printf("map_check 1 is wrong\n");
+  }
+  // user_pa = PTE2PA(*user_pte);
+
+  ppk_pte = walk(ppk_pagetable, i<<(12), 0);
+  if((ppk_pte == 0) || ((*ppk_pte & PTE_V) == 0)){
+    printf("ppk_pagetable is %p\n",ppk_pagetable);
+    printf("user_pagetable is %p\n",user_pagetable);
+    printf("the wrong i is %d\nsize is %p\n",i,sz);
+    printf("ifimm is %d\n",ifimm);
+    // panic("map_check 2 is wrong");
+    printf("map_check 2 is wrong\n");
+    printf("1111111111111111111111111111111111111111111111111111111111111111111111\n");
+  }
+  // ppk_pa = PTE2PA(*ppk_pte);
+
+  // if(ppk_pa != user_pa){
+  //   printf("whole size is %p problem occurs in %p\n",sz,i<<12);
+  //   printf("ppk_pa is %p user_pa is %p\n",ppk_pa,user_pa);
+  //   // panic("not mapped correct!");
+  //   printf("not mapped correct!\n");
+  // }
+  }
+}
+
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.
 // Return 0 on success, -1 on error.
+// 这里原先的做法是先把不足一页的部分取出来，然后按页一页一页来取
+// 因为虚拟空间的一页对应物理空间的一页
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
+  //test
+  // uint64 va0, pa0=0;
+  // va0 = PGROUNDDOWN(srcva);
+  // pa0 = walkaddr(pagetable, va0);
+  // printf("original_right: pa get %d\n",(int*)(pa0 + (srcva - va0)));
 
-  while(len > 0){
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
-    n = PGSIZE - (srcva - va0);
-    if(n > len)
-      n = len;
-    memmove(dst, (void *)(pa0 + (srcva - va0)), n);
-
-    len -= n;
-    dst += n;
-    srcva = va0 + PGSIZE;
+  // hw code
+  if(copyin_new(pagetable,dst,srcva,len)==0)
+  {
+    // printf("copyin succeed\n");
+    return 0;
   }
-  return 0;
+  else
+  {
+    // printf("copyin fail\n");
+    return -1; 
+  }
+  
+  // original code
+  // uint64 n, va0, pa0=0;
+  // // struct proc*  p=  myproc();
+  // // pte_t *pte;
+  // // uint64  pa;
+
+  // while(len > 0){
+  //   va0 = PGROUNDDOWN(srcva);
+  //   pa0 = walkaddr(pagetable, va0);
+
+  //   // printf("original: pa get %p\n",walkaddr(pagetable, srcva));// 从这一步可以看出来，walkaddr返回的是对应的物理地址的页对齐情况，并不带后面的偏移量
+  //   // printf("map pa get: %p\n",(pa0 + (srcva - va0)));
+    
+  //   if(pa0 == 0)
+  //     return -1;
+  //   n = PGSIZE - (srcva - va0);
+  //   if(n > len)
+  //     n = len;
+  //   memmove(dst, (void *)(pa0 + (srcva - va0)), n);
+
+  //   len -= n;
+  //   dst += n;
+  //   srcva = va0 + PGSIZE;
+
+ 
+
+  // // pte = walk(p->ppk_pagetable, va0, 0);
+  // // if((pte == 0) || ((*pte & PTE_V) == 0))
+  // //   panic("check proc pte is wrong");
+  // // pa = PTE2PA(*pte);
+  
+
+  // }
+
+  // // printf("copyin succeed\n");
+  // return 0;
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -483,38 +675,74 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
-  uint64 n, va0, pa0;
-  int got_null = 0;
-
-  while(got_null == 0 && max > 0){
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
-    n = PGSIZE - (srcva - va0);
-    if(n > max)
-      n = max;
-
-    char *p = (char *) (pa0 + (srcva - va0));
-    while(n > 0){
-      if(*p == '\0'){
-        *dst = '\0';
-        got_null = 1;
-        break;
-      } else {
-        *dst = *p;
-      }
-      --n;
-      --max;
-      p++;
-      dst++;
-    }
-
-    srcva = va0 + PGSIZE;
-  }
-  if(got_null){
+  if(copyinstr_new(pagetable, dst,srcva, max)==0){
     return 0;
-  } else {
+  }
+  else{
+    // printf("copyinstr fail\n");
     return -1;
   }
+  // uint64 n, va0, pa0;
+  // int got_null = 0;
+
+  // while(got_null == 0 && max > 0){
+  //   va0 = PGROUNDDOWN(srcva);
+  //   pa0 = walkaddr(pagetable, va0);
+  //   if(pa0 == 0)
+  //     return -1;
+  //   n = PGSIZE - (srcva - va0);
+  //   if(n > max)
+  //     n = max;
+
+  //   char *p = (char *) (pa0 + (srcva - va0));
+  //   while(n > 0){
+  //     if(*p == '\0'){
+  //       *dst = '\0';
+  //       got_null = 1;
+  //       break;
+  //     } else {
+  //       *dst = *p;
+  //     }
+  //     --n;
+  //     --max;
+  //     p++;
+  //     dst++;
+  //   }
+
+  //   srcva = va0 + PGSIZE;
+  // }
+  // if(got_null){
+  //   return 0;
+  // } else {
+  //   return -1;
+  // }
+}
+
+void
+assis_vmprint(pagetable_t pagetable,int level){
+  if(level<0)
+    return;
+  pte_t pte;
+  char* a;
+  if(level == 2)
+    a="..";
+  else if(level==1)
+    a=".. ..";
+  else
+    a=".. .. ..";
+  for(int i=0;i<512;i++){
+    pte = pagetable[i];
+    if(pte & PTE_V){
+      printf("%s%d: pte %p pa %p\n",a,i,pte,PTE2PA(pte));
+      assis_vmprint((pagetable_t)PTE2PA(pte),level-1);
+    }
+  }
+  return;
+}
+
+void
+vmprint(pagetable_t pagetable){
+  printf("page table %p\n",pagetable);
+  assis_vmprint(pagetable,2);
+  return;
 }
