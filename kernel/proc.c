@@ -303,11 +303,6 @@ fork(void)
 
   release(&np->lock);
 
-<<<<<<< HEAD
-=======
-  //sysinfo使用，每次fork就加一个
-  proc_num++;
->>>>>>> caraj/my_syscall
 
   return pid;
 }
