@@ -10,6 +10,7 @@
 
 uint64 get_free_mem(void);
 uint64 get_used_proc(void);
+uint64 get_free_fd(void);
 
 uint64
 sys_exit(void)
@@ -122,6 +123,7 @@ sys_sysinfo(void)
   uint64 p_user;
   p_kernel.freemem = get_free_mem();
   p_kernel.nproc = get_used_proc();
+  p_kernel.freefd = get_free_fd();
   if(argaddr(0,&p_user)<0){
     return -1;
   }

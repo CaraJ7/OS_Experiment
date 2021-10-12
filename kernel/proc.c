@@ -709,3 +709,17 @@ int
 get_used_proc(void){
   return proc_num;
 }
+
+int 
+get_free_fd(void){
+  struct proc *p ;
+  p = myproc();
+  int cnt=NOFILE;
+  for(int i=0;i<NOFILE;i++){
+    if(p->ofile[i]!=0){
+      cnt--;
+    }
+      
+  }
+  return cnt;
+}
