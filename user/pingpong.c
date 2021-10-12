@@ -1,6 +1,6 @@
 
-#include "../kernel/types.h"
-#include "./user.h"
+#include "kernel/types.h"
+#include "user.h"
 
 
 int main(){

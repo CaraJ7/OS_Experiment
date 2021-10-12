@@ -1,7 +1,7 @@
 // 一定要fork??
 #include "../kernel/types.h"
-#include "./user.h"
 #include "kernel/param.h"
+#include "./user.h"
 
 #define MAX_LENGTH 30
 
