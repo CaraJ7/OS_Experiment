@@ -21,8 +21,7 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
-// sysinfo 使用，记录不是Unused的进程的个数
-static uint64 proc_num;
+
 
 // initialize the proc table at boot time.
 void
@@ -154,8 +153,7 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
 
-  //sysinfo使用，每次free了就减一个
-  proc_num--;
+
 }
 
 // Create a user page table for a given process,
@@ -305,8 +303,6 @@ fork(void)
 
   release(&np->lock);
 
-  //sysinfo使用，每次free了就减一个
-  proc_num++;
 
   return pid;
 }
@@ -707,19 +703,35 @@ procdump(void)
 
 int
 get_used_proc(void){
-  return proc_num;
+  int cnt=0;
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+  acquire(&p->lock);
+  if(p->state == UNUSED) {
+      cnt++;
+  }
+  release(&p->lock);
+}
+  return cnt;
+
 }
 
 int 
 get_free_fd(void){
-  struct proc *p ;
-  p = myproc();
-  int cnt=NOFILE;
-  for(int i=0;i<NOFILE;i++){
-    if(p->ofile[i]!=0){
-      cnt--;
+  int cnt=NPROC*NOFILE;
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+  acquire(&p->lock);
+  if(p->state != UNUSED) {
+    for(int fd = 0; fd < NOFILE; fd++){
+      if(p->ofile[fd] != 0){
+        cnt--;
+      }
     }
-      
+  }
+  release(&p->lock);
   }
   return cnt;
 }
