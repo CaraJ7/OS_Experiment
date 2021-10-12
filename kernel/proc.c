@@ -343,12 +343,14 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  user_mapto_kernel(np->pagetable,np->ppk_pagetable,PGROUNDUP(np->sz),0,0,PTE_W|PTE_R|PTE_X);
+
+
   release(&np->lock);
 
   
   // printf("fork into the map\n fork user_pagetable is %p\n",np->pagetable);
-  user_mapto_kernel(np->pagetable,np->ppk_pagetable,PGROUNDUP(np->sz),0,0,PTE_W|PTE_R|PTE_X);
-  // map_check(np->pagetable,np->ppk_pagetable,0,PGROUNDUP(np->sz),3);
+    // map_check(np->pagetable,np->ppk_pagetable,0,PGROUNDUP(np->sz),3);
 
   // printf("fork end\n");
   return pid;

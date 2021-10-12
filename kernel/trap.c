@@ -147,8 +147,8 @@ kerneltrap()
   if((which_dev = devintr()) == 0){
     printf("scause %p\n", scause);
     printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
-    // panic("kerneltrap");
-    printf("kerneltrap");
+    panic("kerneltrap");
+    // printf("kerneltrap");
   }
 
   // give up the CPU if this is a timer interrupt.

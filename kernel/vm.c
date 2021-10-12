@@ -224,8 +224,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     if(*pte & PTE_V){
       printf("pagetable address is %p\nva is %p\npa is %p\n",pagetable,va,pa);
       printf("already pa is %p\n",PTE2PA(*pte));
-      // panic("remap");
-      printf("remap");
+      panic("remap");
+      // printf("remap");
     }
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
