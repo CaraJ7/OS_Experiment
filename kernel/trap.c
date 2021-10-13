@@ -67,7 +67,7 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else { // devintr查看是什么中断，如果没认出来就杀掉进程，否则区分是timer的中断还是其他中断
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
@@ -75,6 +75,130 @@ usertrap(void)
 
   if(p->killed)
     exit(-1);
+
+  // alarm用。这里认为，只要expected_ticks=0就是不需要alarm的。
+  // 因为，如果真的是after every 0 ticks call the handler,那么第一次设置sigalarm的时候就已经
+  // 返回到了该进程，那么就已经使用了时间片(如果说schedule了，也一样，反正总要返回)
+  // 本质是这里其实并没有区分进程和程序
+  // 而且是0没啥意义啊，这个程序直接就不执行了，总往handler那里跳
+
+  // 这个if是判断是不是从handler的函数进来的，如果是handler进来的，那就跳过这一段。
+  // 因为如果handler函数太长，可能也会被中断
+  if(!(which_dev==2 && p->expected_ticks!=0 && p->remain_ticks==0)){
+    if(p->return_from_handler){ // 这是从sigreturn执行完来的，需要恢复寄存器
+      p->return_from_handler = 0;
+
+        // p->trapframe->epc = p->epc;
+
+        // p->trapframe->ra =p->ra   ;
+        // p->trapframe->sp =p->sp   ;
+        // p->trapframe->s0 =p->s0;
+        // p->trapframe->s1 =p->s1;
+        // p->trapframe->a0 =p->a0;
+        // p->trapframe->a1 =p->a1;
+
+        // p->trapframe->a4 =p->a4;
+        // p->trapframe->a5 =p->a5;
+
+        // p->trapframe->s2 =p->s2;
+        // p->trapframe->s3 =p->s3;
+        // p->trapframe->s4 =p->s4;
+        // p->trapframe->s5 =p->s5;
+
+          p->trapframe->epc = p->epc;
+          p->trapframe->ra = p->ra;
+          p->trapframe->sp = p->sp;
+          p->trapframe->gp = p->gp;
+          p->trapframe->tp = p->tp;
+          p->trapframe->t0 = p->t0;
+          p->trapframe->t1 = p->t1;
+          p->trapframe->t2 = p->t2;
+          p->trapframe->s0 = p->s0;
+          p->trapframe->s1 = p->s1;
+          p->trapframe->a0 = p->a0;
+          p->trapframe->a1 = p->a1;
+          p->trapframe->a2 = p->a2;
+          p->trapframe->a3 = p->a3;
+          p->trapframe->a4 = p->a4;
+          p->trapframe->a5 = p->a5;
+          p->trapframe->a6 = p->a6;
+          p->trapframe->a7 = p->a7;
+          p->trapframe->s2 = p->s2;
+          p->trapframe->s3 = p->s3;
+          p->trapframe->s4 = p->s4;
+          p->trapframe->s5 = p->s5;
+          p->trapframe->s6 = p->s6;
+          p->trapframe->s7 = p->s7;
+          p->trapframe->s8 = p->s8;
+          p->trapframe->s9 = p->s9;
+          p->trapframe->s10 = p->s10;
+          p->trapframe->s11 = p->s11;
+          p->trapframe->t3 = p->t3;
+          p->trapframe->t4 = p->t4;
+          p->trapframe->t5 = p->t5;
+          p->trapframe->t6 = p->t6;
+         
+    }
+    if(which_dev == 2 && p->expected_ticks!=0){ // 这是在函数中，减一个时间片  
+      p->remain_ticks--;
+      if(p->remain_ticks==0){ // 如果时间片用完，把寄存器存好，转移到handler函数
+        // store registers
+        p->epc=p->trapframe->epc ;
+
+        //   p->ra =p->trapframe->ra  ;
+        //  p->sp =p->trapframe->sp  ;
+
+        //  p->s0 =p->trapframe->s0  ;
+        //  p->s1 =p->trapframe->s1  ;
+        //  p->a0 =p->trapframe->a0  ;
+        //  p->a1 =p->trapframe->a1  ;
+
+        //  p->a4 =p->trapframe->a4  ;
+        //  p->a5 =p->trapframe->a5  ;
+
+        //  p->s2 =p->trapframe->s2  ;
+        //  p->s3 =p->trapframe->s3  ;
+        //  p->s4 =p->trapframe->s4  ;
+        //  p->s5 =p->trapframe->s5  ;
+
+          p->ra =p->trapframe->ra  ;
+  p->sp =p->trapframe->sp  ;
+  p->gp =p->trapframe->gp  ;
+  p->tp =p->trapframe->tp  ;
+  p->t0 =p->trapframe->t0  ;
+  p->t1 =p->trapframe->t1  ;
+  p->t2 =p->trapframe->t2  ;
+  p->s0 =p->trapframe->s0  ;
+  p->s1 =p->trapframe->s1  ;
+  p->a0 =p->trapframe->a0  ;
+  p->a1 =p->trapframe->a1  ;
+  p->a2 =p->trapframe->a2  ;
+  p->a3 =p->trapframe->a3  ;
+  p->a4 =p->trapframe->a4  ;
+  p->a5 =p->trapframe->a5  ;
+  p->a6 =p->trapframe->a6  ;
+  p->a7 =p->trapframe->a7  ;
+  p->s2 =p->trapframe->s2  ;
+  p->s3 =p->trapframe->s3  ;
+  p->s4 =p->trapframe->s4  ;
+  p->s5 =p->trapframe->s5  ;
+  p->s6 =p->trapframe->s6  ;
+  p->s7 =p->trapframe->s7  ;
+  p->s8 =p->trapframe->s8  ;
+  p->s9 =p->trapframe->s9  ;
+  p->s10 =p->trapframe->s10;
+  p->s11 =p->trapframe->s11;
+  p->t3 =p->trapframe->t3  ;
+  p->t4 =p->trapframe->t4  ;
+  p->t5 =p->trapframe->t5  ;
+  p->t6 =p->trapframe->t6  ;  
+
+
+        p->trapframe->epc = p->handler_address;
+        usertrapret();
+      }
+    }
+  }
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
@@ -218,3 +342,69 @@ devintr()
   }
 }
 
+// down
+        //  p->ra =p->trapframe->ra  ;
+        //  p->sp =p->trapframe->sp  ;
+        // //  p->gp =p->trapframe->gp  ;
+        // //  p->tp =p->trapframe->tp  ;
+        // //  p->t0 =p->trapframe->t0  ;
+        // //  p->t1 =p->trapframe->t1  ;
+        // //  p->t2 =p->trapframe->t2  ;
+        //  p->s0 =p->trapframe->s0  ;
+        //  p->s1 =p->trapframe->s1  ;
+        //  p->a0 =p->trapframe->a0  ;
+        //  p->a1 =p->trapframe->a1  ;
+        // //  p->a2 =p->trapframe->a2  ;
+        // //  p->a3 =p->trapframe->a3  ;
+        //  p->a4 =p->trapframe->a4  ;
+        //  p->a5 =p->trapframe->a5  ;
+        // //  p->a6 =p->trapframe->a6  ;
+        // //  p->a7 =p->trapframe->a7  ;
+        //  p->s2 =p->trapframe->s2  ;
+        //  p->s3 =p->trapframe->s3  ;
+        //  p->s4 =p->trapframe->s4  ;
+        //  p->s5 =p->trapframe->s5  ;
+        //  p->s6 =p->trapframe->s6  ;
+        //  p->s7 =p->trapframe->s7  ;
+        //  p->s8 =p->trapframe->s8  ;
+        //  p->s9 =p->trapframe->s9  ;
+        //  p->s10 =p->trapframe->s10;
+        //  p->s11 =p->trapframe->s11;
+        //  p->t3 =p->trapframe->t3  ;
+        //  p->t4 =p->trapframe->t4  ;
+        //  p->t5 =p->trapframe->t5  ;
+        //  p->t6 =p->trapframe->t6  ;  
+
+  //up
+ // p->trapframe->epc = p->epc;
+          // p->trapframe->ra = p->ra;
+          // p->trapframe->sp = p->sp;
+          // // p->trapframe->gp = p->gp;
+          // // p->trapframe->tp = p->tp;
+          // // p->trapframe->t0 = p->t0;
+          // // p->trapframe->t1 = p->t1;
+          // // p->trapframe->t2 = p->t2;
+          // p->trapframe->s0 = p->s0;
+          // p->trapframe->s1 = p->s1;
+          // p->trapframe->a0 = p->a0;
+          // p->trapframe->a1 = p->a1;
+          // // p->trapframe->a2 = p->a2;
+          // // p->trapframe->a3 = p->a3;
+          // p->trapframe->a4 = p->a4;
+          // p->trapframe->a5 = p->a5;
+          // // p->trapframe->a6 = p->a6;
+          // // p->trapframe->a7 = p->a7;
+          // p->trapframe->s2 = p->s2;
+          // p->trapframe->s3 = p->s3;
+          // p->trapframe->s4 = p->s4;
+          // p->trapframe->s5 = p->s5;
+          // p->trapframe->s6 = p->s6;
+          // p->trapframe->s7 = p->s7;
+          // p->trapframe->s8 = p->s8;
+          // p->trapframe->s9 = p->s9;
+          // p->trapframe->s10 = p->s10;
+          // p->trapframe->s11 = p->s11;
+          // p->trapframe->t3 = p->t3;
+          // p->trapframe->t4 = p->t4;
+          // p->trapframe->t5 = p->t5;
+          // p->trapframe->t6 = p->t6;

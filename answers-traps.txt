@@ -1,0 +1,10 @@
+1.RISC-V assembly
+	Q1: registers:a0,a1,a2
+		register holding 13 in main's call to printf:a2
+	Q2:	call to function f: address 0x26
+		call to function g: address 0x14
+	Q3:	0x630
+	Q4:	0x30
+	Q5:	i should be 726c6400.
+		No, 57616 should not be changed.
+	Q6:	the value in the rigister a2. Because the value of argument 2 is not specified. 

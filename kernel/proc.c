@@ -121,6 +121,11 @@ found:
     return 0;
   }
 
+  p->expected_ticks = 0;
+  p->handler_address = 0;
+  p->remain_ticks = 0;
+  p->return_from_handler = 0;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
