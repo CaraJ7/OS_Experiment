@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -180,10 +182,22 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
-    if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
-    if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+    // 这里是最后一个out of memory的实验，到这里的sz非常大，远大于maxva.被kill了以后走到了这里，可我不知道sz为什么会加到这里
+    // 现在知道了，sys_sbrk的精度问题 gdx
+    // if(a>=MAXVA){ 
+    //   break;
+    // }
+    if(((pte = walk(pagetable, a, 0)) == 0)){
+      // panic("uvmunmap: walk"); // 也可能，但必须是第一个9位的新的一页没被map过
+      // printf("uvmunmap: walk");
+      continue;
+    }
+    if((*pte & PTE_V) == 0){
+      *pte = 0;
+      // panic("uvmunmap: not mapped");
+      // printf("uvmunmap: not mapped\n");
+      continue;
+    }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -294,8 +308,11 @@ freewalk(pagetable_t pagetable)
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
+  // printf("here before\n");
+  // printf("sz is %p\n",sz);
   if(sz > 0)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  // printf("here\n");
   freewalk(pagetable);
 }
 
@@ -314,10 +331,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+    if((pte = walk(old, i, 0)) == 0){
+      // panic("uvmcopy: pte should exist");
+      // printf("uvmcopy: pte should exist\n");
+      continue;
+    }
+    if((*pte & PTE_V) == 0){
+      // panic("uvmcopy: page not present");
+      // printf("uvmcopy: page not present\n");
+      continue;
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -341,11 +364,14 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
+  struct proc *p;
+  p = myproc();
   
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");
   *pte &= ~PTE_U;
+  p->guardpage_va = va;
 }
 
 // Copy from kernel to user.
@@ -357,6 +383,13 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   uint64 n, va0, pa0;
 
   while(len > 0){
+    if(lazy_isunmap(pagetable,dstva)==1){//判断dstva且有没有被map
+      //如果没有被map,就去补偿一页,如果错误要返回-1，要不然是地址无效，要不然就是kalloc失败，要杀死进程的
+      if(lazy_compensate(pagetable,dstva)==-1){
+        return -1;
+      }
+    }
+
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
@@ -380,12 +413,29 @@ int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
   uint64 n, va0, pa0;
+  //  struct proc *p;
+  //  p=myproc();
+  //  if(srcva==0x11000){
+  //  printf("beforewhile now size is %p\n",p->sz);
+  //   printf("beforewhile walk of pagetable is %p\n",walk(p->pagetable,srcva,0));
+  //  printf("pagetable beforewhile walk of pagetable is %p\n",walk(pagetable,srcva,0));
+  //  }
 
   while(len > 0){
+    if(lazy_isunmap(pagetable,srcva)==1){//判断dstva且有没有被map
+      //如果没有被map,就去补偿一页,如果错误要返回-1，要不然是地址无效，要不然就是kalloc失败，要杀死进程的
+      // printf("in is unmap,srcva is %p\n",srcva);
+      if(lazy_compensate(pagetable,srcva)==-1){
+        // printf("fail lazycompensate\n");
+        return -1;
+      }
+    }
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
+    if(pa0 == 0){
+      // printf("fail pa0\n");
       return -1;
+    }
     n = PGSIZE - (srcva - va0);
     if(n > len)
       n = len;
@@ -409,6 +459,12 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   int got_null = 0;
 
   while(got_null == 0 && max > 0){
+    if(lazy_isunmap(pagetable,srcva)==1){//判断dstva且有没有被map
+      //如果没有被map,就去补偿一页,如果错误要返回-1，要不然是地址无效，要不然就是kalloc失败，要杀死进程的
+      if(lazy_compensate(pagetable,srcva)==-1){
+        return -1;
+      }
+    }
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
@@ -439,4 +495,74 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+// 0正常，-1异常
+//在unmapped_va的基础上补充一页,输入的一定是unmapped的va
+int
+lazy_compensate(pagetable_t pagetable,uint64 unmapped_va){ 
+  struct proc *p;
+  p = myproc();
+  uint64 sz = p->sz;
+  if((unmapped_va>=sz)||(PGROUNDDOWN(unmapped_va)==p->guardpage_va)||(unmapped_va>=MAXVA)){ //访问的地址确实越界
+    // printf("lazy_compensate: really beyond the sz\n");
+    return -1;
+  }
+  else{
+    // 对于一个已经page-aligned的地址而言，pgdown=pgup=address
+    if((uvmalloc(pagetable, PGROUNDDOWN(unmapped_va), PGSIZE+PGROUNDDOWN(unmapped_va))) == 0){
+      // printf("lazy_compensate: cannot malloc\n");
+      return -1;
+    }
+    else{
+      return 0;
+    }
+  }
+
+}
+
+// 判断judge_va是否有被map,只关心这个map!不关心judge_va到底合不合法
+// 没有被map返回1,否则返回0
+int 
+lazy_isunmap(pagetable_t pagetable,uint64 judge_va){
+  // pte_t* pte;
+  // pte=walk(pagetable,judge_va,0);
+  // 这个第三项我不知道为什么要加
+  if((judge_va<MAXVA)&&((walk(pagetable,judge_va,0)==0)||(((*walk(pagetable,judge_va,0))& PTE_V)==0))){
+    // if(judge_va==0x11000)
+      // printf("in lazy isunmap");
+    return 1;
+  }
+  else
+    return 0;
+}
+
+
+void
+assis_vmprint(pagetable_t pagetable,int level){
+  if(level<0)
+    return;
+  pte_t pte;
+  char* a;
+  if(level == 2)
+    a="..";
+  else if(level==1)
+    a=".. ..";
+  else
+    a=".. .. ..";
+  for(int i=0;i<512;i++){
+    pte = pagetable[i];
+    if(pte & PTE_V){
+      printf("%s%d: pte %p pa %p\n",a,i,pte,PTE2PA(pte));
+      assis_vmprint((pagetable_t)PTE2PA(pte),level-1);
+    }
+  }
+  return;
+}
+
+void
+vmprint(pagetable_t pagetable){
+  printf("page table %p\n",pagetable);
+  assis_vmprint(pagetable,2);
+  return;
 }

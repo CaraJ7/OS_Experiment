@@ -41,14 +41,33 @@ sys_wait(void)
 uint64
 sys_sbrk(void)
 {
-  int addr;
+  uint64 addr;
   int n;
+  struct proc *p;
 
   if(argint(0, &n) < 0)
     return -1;
   addr = myproc()->sz;
-  if(growproc(n) < 0)
-    return -1;
+  if(n<0){
+    if(growproc(n) < 0)
+      return -1;
+  }
+  else if(n>0){
+    if(n+addr>MAXVA){
+      //  printf("1 sz is %p\n",n+addr);
+      return -1;
+    }
+    p=myproc();
+    p->sz = addr+n;
+    // printf("sz is %p\n",p->sz);
+    // if(addr==0x11000){
+    //   printf("now size is %p\n",p->sz);
+    //   printf("walk of pagetable is %p\n",*walk(p->pagetable,addr,0));
+    // }
+  }
+  // if(growproc(n) < 0)
+  //   return -1;
+  
   return addr;
 }
 

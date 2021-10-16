@@ -121,6 +121,8 @@ found:
     return 0;
   }
 
+  p->guardpage_va =MAXVA;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -139,8 +141,9 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
-  if(p->pagetable)
-    proc_freepagetable(p->pagetable, p->sz);
+  if(p->pagetable){
+    // printf("here\n"); // 第一个实验在这里进入panic
+    proc_freepagetable(p->pagetable, p->sz);}
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -150,6 +153,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->guardpage_va =MAXVA;
 }
 
 // Create a user page table for a given process,
@@ -221,6 +225,8 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
+  p->guardpage_va = MAXVA;
+
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -274,6 +280,8 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
+
+  np->guardpage_va = p->guardpage_va;
 
   np->parent = p;
 
@@ -426,6 +434,8 @@ wait(uint64 addr)
             release(&p->lock);
             return -1;
           }
+          // if(pid==5) 
+          //   vmprint(np->pagetable);
           freeproc(np);
           release(&np->lock);
           release(&p->lock);

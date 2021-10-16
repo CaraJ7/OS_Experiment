@@ -230,6 +230,12 @@ sys_unlink(void)
 
   end_op();
 
+  // struct proc *p;
+  //   p=myproc();
+  //   printf("unlink size is %p\n",p->sz);
+  //   printf("unlink walk of pagetable is %p\n",*walk(p->pagetable,p->sz-PGSIZE,0));
+
+
   return 0;
 
 bad:
@@ -347,6 +353,11 @@ sys_open(void)
 
   iunlock(ip);
   end_op();
+
+    // struct proc *p;
+    // p=myproc();
+    // printf("open size is %p\n",p->sz);
+    // printf("open walk of pagetable is %p\n",*walk(p->pagetable,p->sz-PGSIZE,0));
 
   return fd;
 }

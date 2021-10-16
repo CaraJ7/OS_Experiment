@@ -485,6 +485,8 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
+  // struct proc* p;
+  // p=myproc();
 
   if(off > ip->size || off + n < off)
     return -1;
@@ -494,7 +496,16 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
     bp = bread(ip->dev, bmap(ip, off/BSIZE));
     m = min(n - tot, BSIZE - off%BSIZE);
+    // printf("enter either_copyin\n");
+    // printf("src is %p\n",src);
+    // printf("either_before now size is %p\n",p->sz);
+      // printf("either_before walk of pagetable is %p\n",walk(p->pagetable,0x11000,0));
+
     if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
+      // printf("wrong in either_copyin.src is %p.user_src is %d\n",src,user_src);
+      // printf("pid is %d\n",p->pid);
+      // printf("sz is %p\n",p->sz);
+      // printf("walk of src is %p\n",walk(p->pagetable,src,0));
       brelse(bp);
       n = -1;
       break;

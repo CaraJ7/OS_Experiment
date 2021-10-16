@@ -136,14 +136,19 @@ filewrite(struct file *f, uint64 addr, int n)
 {
   int r, ret = 0;
 
+  // struct proc *p;
+  // p=myproc();
+
   if(f->writable == 0)
     return -1;
 
   if(f->type == FD_PIPE){
+    // printf("enter pipewrite\n");
     ret = pipewrite(f->pipe, addr, n);
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].write)
       return -1;
+    // printf("enter write\n");
     ret = devsw[f->major].write(1, addr, n);
   } else if(f->type == FD_INODE){
     // write a few blocks at a time to avoid exceeding
@@ -161,6 +166,10 @@ filewrite(struct file *f, uint64 addr, int n)
 
       begin_op();
       ilock(f->ip);
+
+      // printf("writeibefore now size is %p\n",p->sz);
+      // printf("writeibefore walk of pagetable is %p\n",walk(p->pagetable,0x11000,0));
+
       if ((r = writei(f->ip, 1, addr + i, f->off, n1)) > 0)
         f->off += r;
       iunlock(f->ip);

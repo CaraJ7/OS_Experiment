@@ -78,10 +78,12 @@ oom(char *s)
 {
   void *m1, *m2;
   int pid;
+  // int i=0;
 
   if((pid = fork()) == 0){
     m1 = 0;
     while((m2 = malloc(4096*4096)) != 0){
+      // printf("i is %d.m2 is %p\n",i++,m2);
       *(char**)m2 = m1;
       m1 = m2;
     }
