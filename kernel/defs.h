@@ -171,6 +171,13 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
+void            init_pagecounter(void);
+int             judge_cow(pagetable_t pagetable,uint64 va);
+void            init_pagecounter(void);
+void            increase_pagecounter(uint64 pa);
+void            decrease_pagecounter(uint64 pa);
+void            unset_pagecounter(uint64 pa);
+int             cow_compensate(pagetable_t pagetable,uint64 va);
 
 // plic.c
 void            plicinit(void);
