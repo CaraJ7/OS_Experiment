@@ -98,7 +98,23 @@ kalloc(void)
 
 uint64
 get_free_mem(void){
-  uint64 free_mem;
-  free_mem = WHOLE_FREE_MEM - Used_mem;
-  return free_mem;
+  uint64 other_method=0;
+  // uint64 free_mem;
+
+  struct run *r;
+
+  acquire(&kmem.lock);
+  r = kmem.freelist;
+  while(r)
+  {
+    other_method+=PGSIZE;
+    r=r->next;
+  }
+  release(&kmem.lock);
+
+  // free_mem = WHOLE_FREE_MEM - Used_mem;
+
+  // printf("kalloc method is %p\nnew method is %p\n",free_mem,other_method);
+
+  return other_method;
 }
