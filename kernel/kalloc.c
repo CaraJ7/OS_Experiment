@@ -32,11 +32,12 @@ kmem_init()
     name[5]=i+48;
     name[6]=0;
     initlock(&kmem[i].lock,name);
-    if(i!=(NCPU-1)){
-
+    if(i==1){
+      freerange((void*)(PGROUNDDOWN((PHYSTOP-(uint64)end)/3)+end),(void*)(PGROUNDDOWN(2*(PHYSTOP-(uint64)end)/3)+end));
     }
-    else{
-      
+    else if(i==2)
+    {
+      freerange((void*)(PGROUNDDOWN(2*(PHYSTOP-(uint64)end)/3)+end),(void*)PHYSTOP);
     }
   }
 }
@@ -45,7 +46,7 @@ void
 kinit()
 {
   initlock(&kmem[0].lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  freerange(end, (void*)(PGROUNDDOWN((PHYSTOP-(uint64)end)/3)+end));
 }
 
 void
@@ -100,6 +101,8 @@ kalloc(void)
     kmem[cpu_id].freelist = r->next;
   else{
     r=steal_others(cpu_id);
+    if(r)
+      kmem[cpu_id].freelist = r->next;
   }
   release(&kmem[cpu_id].lock);
   pop_off();
@@ -121,24 +124,25 @@ steal_others(int cpu_id)
     r=kmem[i].freelist;
     if(r){
       kmem[i].freelist=r->next;
+      r->next=0;
       kmem[cpu_id].freelist=r; //分配第一页
-      r=kmem[i].freelist;
-      for(int j=0;j<4&&r!=0;j++){ // 再分配四页
+      r=kmem[i].freelist;//r重新指向i的头
+      for(int j=0;j<9&&r!=0;j++){ // 再分配四页
+
+        kmem[i].freelist=r->next;
+        r->next = kmem[cpu_id].freelist;
+        kmem[cpu_id].freelist=r;
         r=kmem[i].freelist;
-        if(r){
-          kmem[i].freelist=r->next;
-          kmem[cpu_id].freelist=r;
-        }
+        
       }
       release(&kmem[i].lock);
+      break;
     }
     else{
       release(&kmem[i].lock);
       continue;
     }
 
-    if(kmem[cpu_id].freelist!=0)
-      break;
   }
   
   return kmem[cpu_id].freelist;

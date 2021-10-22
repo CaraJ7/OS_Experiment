@@ -68,6 +68,7 @@ void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
 void            kmem_init(void);
+struct run*     steal_others(int cpu_id);
 
 // log.c
 void            initlog(int, struct superblock*);
