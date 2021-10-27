@@ -147,9 +147,17 @@ bget(uint dev, uint blockno)
   for(int i=0;i<NBUCKETS;i++){
     if(i==blockno%13)
       continue;
+
+       // printf("already in lock %d ask for lock %d\n",blockno%13,i);
+
+    // ...原来居然是差在这一句，这里把这个锁释放了也没事。
+    //直接考虑死锁情况，那一定是拿到了blockno%NBUCKETS锁的同时要去拿另外一个，但是这个句子就直接保证他根本不能拿到blockno%NBUCKETS的同时再去拿别人
+    // 同时这种情况也不会出错，因为这个锁下面的操作都是在做插入，不会有什么其他的更改。即使释放掉以后，在其他的地方又对这个桶进行了更改，也并不影响这个进程接下来要做的事情
+    // 当然，这种情况也是可能出错的，但是比较极限一点。就是哈希疯狂冲突，这个桶里面的元素非常多，别的桶的元素也都用完了。但是这个时候同时，这个桶又释放了很多的元素，那么这个时候他是检测不到的
+    // emmm我想了想，好像别的实现方法也考虑不到这种情况，因为不会再回去检查自己的桶了。
     release(&bcache.lock[blockno%NBUCKETS]);
-    // printf("already in lock %d ask for lock %d\n",blockno%13,i);
-    acquire(&bcache.lock[i]);
+ 
+    acquire(&bcache.lock[i]); 
     acquire(&bcache.lock[blockno%NBUCKETS]);
     for(b = bcache.buckets[i].next; b != &bcache.buckets[i]; b = b->next){
       if(b->refcnt == 0){
