@@ -148,6 +148,7 @@ void test1()
   file[0] = 'B';
   file[2] = '\0';
   for(int i = 0; i < NCHILD; i++){
+    printf("i is %d\n",i);
     file[1] = '0' + i;
     unlink(file);
     if (i == 0) {

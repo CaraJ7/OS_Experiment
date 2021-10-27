@@ -26,11 +26,11 @@ struct {
 void 
 kmem_init()
 {
-  char name[10] ="kmem_";
+  char name[10] ="kmem";
   
   for (int i=1;i<NCPU;i++){
-    name[5]=i+48;
-    name[6]=0;
+    // name[5]=i+48;
+    // name[6]=0;
     initlock(&kmem[i].lock,name);
     if(i==1){
       freerange((void*)(PGROUNDDOWN((PHYSTOP-(uint64)end)/3)+end),(void*)(PGROUNDDOWN(2*(PHYSTOP-(uint64)end)/3)+end));
