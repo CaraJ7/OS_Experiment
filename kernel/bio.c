@@ -144,8 +144,8 @@ bget(uint dev, uint blockno)
 
   
   // // 桶内没有，要从桶外找
-  for(int i=0;i<NBUCKETS;i++){
-    if(i==blockno%13)
+  for(int i=(1+blockno)%NBUCKETS;i!=blockno%NBUCKETS;i=(i+1)%NBUCKETS){
+    if(i==blockno%NBUCKETS)
       continue;
 
        // printf("already in lock %d ask for lock %d\n",blockno%13,i);
@@ -155,10 +155,13 @@ bget(uint dev, uint blockno)
     // 同时这种情况也不会出错，因为这个锁下面的操作都是在做插入，不会有什么其他的更改。即使释放掉以后，在其他的地方又对这个桶进行了更改，也并不影响这个进程接下来要做的事情
     // 当然，这种情况也是可能出错的，但是比较极限一点。就是哈希疯狂冲突，这个桶里面的元素非常多，别的桶的元素也都用完了。但是这个时候同时，这个桶又释放了很多的元素，那么这个时候他是检测不到的
     // emmm我想了想，好像别的实现方法也考虑不到这种情况，因为不会再回去检查自己的桶了。
-    release(&bcache.lock[blockno%NBUCKETS]);
+    
+    // 这里放开不行，可能会缓存两个一样的块
+    // release(&bcache.lock[blockno%NBUCKETS]);
+
  
     acquire(&bcache.lock[i]); 
-    acquire(&bcache.lock[blockno%NBUCKETS]);
+    // acquire(&bcache.lock[blockno%NBUCKETS]);
     for(b = bcache.buckets[i].next; b != &bcache.buckets[i]; b = b->next){
       if(b->refcnt == 0){
         // printf("find vacancy in %d\n",i);
