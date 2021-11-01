@@ -17,6 +17,10 @@ struct entry *table[NBUCKET];
 int keys[NKEYS];
 int nthread = 1;
 
+  // initialize the lock
+pthread_mutex_t lock[NBUCKET];
+
+
 double
 now()
 {
@@ -27,7 +31,7 @@ now()
 
 static void 
 insert(int key, int value, struct entry **p, struct entry *n)
-{
+{ // 头插法，在一个桶里插进来新的元素
   struct entry *e = malloc(sizeof(struct entry));
   e->key = key;
   e->value = value;
@@ -35,13 +39,14 @@ insert(int key, int value, struct entry **p, struct entry *n)
   *p = e;
 }
 
-static 
+static // key存的是值，valuse存的是哪一个thread放进来的 
 void put(int key, int value)
 {
   int i = key % NBUCKET;
 
   // is the key already present?
   struct entry *e = 0;
+  pthread_mutex_lock(&lock[i]);
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key)
       break;
@@ -53,6 +58,7 @@ void put(int key, int value)
     // the new is new.
     insert(key, value, &table[i], table[i]);
   }
+  pthread_mutex_unlock(&lock[i]);
 }
 
 static struct entry*
@@ -62,13 +68,15 @@ get(int key)
 
 
   struct entry *e = 0;
+
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key) break;
   }
 
   return e;
 }
-
+// put是在根据keys[i]中的值来%NBUCKETs来达到哈希的效果
+// 这里put_thread是每个thread都来放，每个人负责自己的那一部分，类似数组
 static void *
 put_thread(void *xa)
 {
@@ -82,6 +90,7 @@ put_thread(void *xa)
   return NULL;
 }
 
+// get是在读桶，所以两个线程之间互不影响，结果也应该是一样的
 static void *
 get_thread(void *xa)
 {
@@ -95,6 +104,7 @@ get_thread(void *xa)
   printf("%d: %d keys missing\n", n, missing);
   return NULL;
 }
+
 
 int
 main(int argc, char *argv[])
@@ -112,8 +122,13 @@ main(int argc, char *argv[])
   srandom(0);
   assert(NKEYS % nthread == 0);
   for (int i = 0; i < NKEYS; i++) {
-    keys[i] = random();
+    keys[i] = random(); // keys initialized as random
   }
+
+  // initialize the lock
+  for(int i=0;i<NBUCKET;i++)
+  pthread_mutex_init(&lock[i],NULL);
+
 
   //
   // first the puts

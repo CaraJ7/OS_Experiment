@@ -1,0 +1,16 @@
+Cases are that when there are 2 threads both putting keys in the bucket, the following situation could cause the missing:
+Thread1:
+in function insert:
+	e->key = key;
+  	e->value = value;
+  	e->next = n;
+NOW Time for Thread1 is up.Time for Thread2.
+Coincidentally, Thread2 is also going to execute the same line, i.e.
+	*p=e;
+THEN Time is up again. Thread1 is under control again. Thread1 continues its code, just the same as Thread2 has just executed:
+	*p=e;
+
+So this is the problem.*p has been assigned to different values, which caused the first value has not been saved before being covered by the second value.
+The first key is lost.
+
+Notice that, the missing of keys is not the only problem. There might be the same key with same value in a bucket also due to the shared access to a same bucket.
