@@ -120,7 +120,9 @@ steal_others(int cpu_id)
     if(i==cpu_id){
       continue;
     }
+    release(&kmem[cpu_id].lock);
     acquire(&kmem[i].lock);
+    acquire(&kmem[cpu_id].lock);
     r=kmem[i].freelist;
     if(r){
       kmem[i].freelist=r->next;
