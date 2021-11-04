@@ -239,6 +239,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 // Remove npages of mappings starting from va. va must be
 // page-aligned. The mappings must exist.
 // Optionally free the physical memory.
+// If do_free != 0, physical memory will be freed
 void
 uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
@@ -363,7 +364,7 @@ freewalk(pagetable_t pagetable)
       // this PTE points to a lower-level page table.
       uint64 child = PTE2PA(pte);
       freewalk((pagetable_t)child);
-      pagetable[i] = 0;
+      pagetable[i] = 0;  
     } else if(pte & PTE_V){
       panic("freewalk: leaf");
     }
@@ -725,11 +726,11 @@ assis_vmprint(pagetable_t pagetable,int level){
   pte_t pte;
   char* a;
   if(level == 2)
-    a="..";
+    a="||";
   else if(level==1)
-    a=".. ..";
+    a="|| ||";
   else
-    a=".. .. ..";
+    a="|| || ||";
   for(int i=0;i<512;i++){
     pte = pagetable[i];
     if(pte & PTE_V){
@@ -745,4 +746,13 @@ vmprint(pagetable_t pagetable){
   printf("page table %p\n",pagetable);
   assis_vmprint(pagetable,2);
   return;
+}
+
+// check if use global kpgtbl or not 
+int 
+test_pagetable()
+{
+  uint64 satp = r_satp();
+  uint64 gsatp = MAKE_SATP(kernel_pagetable);
+  return satp != gsatp;
 }

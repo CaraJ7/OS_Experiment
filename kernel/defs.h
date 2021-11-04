@@ -190,6 +190,7 @@ void            ppk_freewalk(pagetable_t pagetable);
 // int             statscopyin(char *buf, int sz) ;
 int             copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
 int             copyinstr_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max);
+int             test_pagetable();
 
 // plic.c
 void            plicinit(void);
