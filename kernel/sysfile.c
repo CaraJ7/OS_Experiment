@@ -126,6 +126,7 @@ sys_link(void)
     return -1;
 
   begin_op();
+  // 查找路径对应的inode
   if((ip = namei(old)) == 0){
     end_op();
     return -1;
@@ -141,10 +142,11 @@ sys_link(void)
   ip->nlink++;
   iupdate(ip);
   iunlock(ip);
-
+  // 找新的的父目录
   if((dp = nameiparent(new, name)) == 0)
     goto bad;
   ilock(dp);
+  // 在父目录里面加上entry
   if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){
     iunlockput(dp);
     goto bad;
@@ -483,4 +485,11 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+
+  return 0;  // not reached
 }

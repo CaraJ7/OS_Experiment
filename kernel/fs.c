@@ -374,20 +374,23 @@ iunlockput(struct inode *ip)
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
+
+// logic block numbers->disk block numbers
 static uint
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
-
+  // direct block的情况 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
       ip->addrs[bn] = addr = balloc(ip->dev);
     return addr;
   }
   bn -= NDIRECT;
-
+  // singly-indirect 
   if(bn < NINDIRECT){
+      // printf("here1\n");
     // Load indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0)
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
@@ -398,6 +401,35 @@ bmap(struct inode *ip, uint bn)
       log_write(bp);
     }
     brelse(bp);
+    return addr;
+  }
+  bn -= NINDIRECT;
+  // doubly-indirect
+  uint index_single= bn/NINDIRECT;// 第一级位置
+  // printf("index single is %d\n",index_single);
+  uint index_direct = bn%NINDIRECT; // 第二级位置
+  struct buf *bp_double; //读double页
+  if(bn < (NINDIRECT*NINDIRECT)){
+    // printf("here2\n");
+    // not single page 
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);//bp是single page
+    a = (uint*)bp->data;
+    // not double page
+    if((addr = a[index_single]) == 0){
+      a[index_single] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+            //应该不可以在这里放开bp，因为还没完全做完，除非先读bp_double再放开？ 
+    bp_double = bread(ip->dev, addr);
+    a = (uint*)bp_double->data;
+    if((addr = a[index_direct]) == 0){
+      a[index_direct] = addr = balloc(ip->dev);
+      log_write(bp_double);
+    }
+    brelse(bp);
+    brelse(bp_double);
     return addr;
   }
 
@@ -411,7 +443,9 @@ itrunc(struct inode *ip)
 {
   int i, j;
   struct buf *bp;
+  struct buf *bp_double;
   uint *a;
+  uint *a_double;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -430,6 +464,26 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT+1]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j]){ // single page exists
+        bp_double = bread(ip->dev, a[j]);
+        a_double = (uint*)bp_double->data;
+        for(int k=0;k<NINDIRECT;k++){
+          if(a_double[k])
+            bfree(ip->dev, a_double[k]);
+        }
+        brelse(bp_double);
+        bfree(ip->dev, a[j]);
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
   }
 
   ip->size = 0;
