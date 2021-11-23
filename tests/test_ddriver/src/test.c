@@ -5,8 +5,9 @@ int main(int argc, char const *argv[])
 {
     int size;
     struct ddriver_state state;
-    int fd = ddriver_open("ddriver");
+    int fd = ddriver_open("/home/guests/190110125/ddriver");
     if (fd < 0) {
+        printf("wrong\n");
         return -1;
     }
     /* Cycle 1: read/write test */
