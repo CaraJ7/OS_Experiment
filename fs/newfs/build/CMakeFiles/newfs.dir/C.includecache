@@ -40,7 +40,7 @@ types.h
 
 ../include/types.h
 
-/home/guests/190110125/user-land-filesystem/fs/newfs/src/newfs.c
+/home/guests/190110125/user-land-filesystem/fs/newfs/src/newfs_util.c
 newfs.h
 /home/guests/190110125/user-land-filesystem/fs/newfs/src/newfs.h
 

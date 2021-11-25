@@ -1,1 +1,1 @@
-/usr/bin/cc  -D_FILE_OFFSET_BITS=64 -no-pie -g -Wall --pedantic -g  -rdynamic CMakeFiles/newfs.dir/src/newfs.c.o  -o newfs  -lfuse /home/guests/190110125/lib/libddriver.a 
+/usr/bin/cc  -D_FILE_OFFSET_BITS=64 -no-pie -g -Wall --pedantic -g  -rdynamic CMakeFiles/newfs.dir/src/newfs.c.o CMakeFiles/newfs.dir/src/newfs_util.c.o  -o newfs  -lfuse /home/guests/190110125/lib/libddriver.a 
