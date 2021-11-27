@@ -263,6 +263,7 @@ create(char *path, short type, short major, short minor)
   if((ip = ialloc(dp->dev, type)) == 0)
     panic("create: ialloc");
 
+  // printf("allocated ip is %p\n",ip);
   ilock(ip);
   ip->major = major;
   ip->minor = minor;
@@ -285,6 +286,48 @@ create(char *path, short type, short major, short minor)
   return ip;
 }
 
+// 默认ip已经上锁
+// 出去的时候ip一定已经解锁且被写回
+// 如果是错误的情况的话,symlink_ip也会返回被释放了的值
+// 正常情况返回0
+struct inode*
+get_to_symlink(struct inode* ip,int* situation,int omode,int depth){
+    //深度太深，形成了环
+    if (depth >= 10){
+      *situation=3;
+      return (struct inode*)0;
+    }
+    struct inode* symlink_ip;
+    char symlink_path[MAXPATH]={'0'};
+    // 保存指向的文件名
+    // strncpy(symlink_path,ip->symlink_path,strlen(ip->symlink_path));
+    // printf("symlink_path is %s\n",symlink_path);
+    readi(ip, 0, (uint64)symlink_path, 0, MAXPATH);
+
+    // 读对应的ip，并且处理异常
+    // 异常情况1，返回situation=1
+    if((symlink_ip = namei(symlink_path)) == 0){
+      iunlockput(ip);
+      *situation=1;
+      return (struct inode*)0;
+    }
+    iunlockput(ip);
+    ilock(symlink_ip);
+    // 异常情况2，返回situation=2
+    if(symlink_ip->type == T_DIR && omode != O_RDONLY){
+      iunlockput(symlink_ip);
+      *situation=2;
+      return (struct inode*)0;
+    }
+    if(symlink_ip->type == T_SYMLINK&& ((omode&O_NOFOLLOW)==0)){
+      return get_to_symlink(symlink_ip, situation,omode,++depth);
+    }
+    *situation=0;
+    return symlink_ip;
+      
+}
+
+
 uint64
 sys_open(void)
 {
@@ -305,7 +348,8 @@ sys_open(void)
       end_op();
       return -1;
     }
-  } else {
+  } 
+  else {
     if((ip = namei(path)) == 0){
       end_op();
       return -1;
@@ -317,6 +361,24 @@ sys_open(void)
       return -1;
     }
   }
+
+
+
+  struct inode *symlink_ip;
+  int situation;
+  // 使用软连接,否则即使是T_SYMLINK也只是打开连接的这个文件
+  if(ip->type == T_SYMLINK && ((omode&O_NOFOLLOW)==0)){
+
+    symlink_ip = get_to_symlink(ip, &situation,omode,0);
+    if(situation!=0){
+      end_op();
+      return -1;
+    }
+
+    ip = symlink_ip;
+  }
+  
+
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
     iunlockput(ip);
@@ -490,6 +552,48 @@ sys_pipe(void)
 uint64
 sys_symlink(void)
 {
+  char target[MAXPATH]={'0'};
+  char src_path[MAXPATH]={'0'};//src_path指的是在这个位置建立symlink文件
+  struct inode  *ip;
 
-  return 0;  // not reached
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, src_path, MAXPATH) < 0)
+    return -1;
+  // printf("target %s\n",target);
+  // printf("src_path %s\n",src_path);
+  begin_op();
+  // 参考sys_open,建立一个T_SYMLINK的文件
+
+  ip = create(src_path, T_SYMLINK, 0, 0);
+  // printf("ip is %p\n",ip);
+  if(ip == 0){
+    end_op();
+    return -1;
+  }
+  iunlockput(ip);
+
+  if((ip = namei(src_path)) == 0){
+    end_op();
+    return -1;
+  }
+  ilock(ip);
+
+  // 把地址存到数据块里面
+  writei(ip, 0, (uint64)target, 0, MAXPATH);
+
+  // strncpy(ip->symlink_path,target,strlen(target));
+  // printf("symlinkpath %s\n",ip->symlink_path);
+  // iunlock(ip);
+  iupdate(ip);
+  iunlockput(ip);
+
+  // struct proc *p = myproc();
+  // iput(p->cwd);
+  // iupdate(ip);
+  // iunlockput(ip);
+
+  end_op();
+
+
+  return 0;  
 }
+
