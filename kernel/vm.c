@@ -5,6 +5,11 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
+#include "sleeplock.h"
+#include "file.h"
+#include "fcntl.h"
 
 /*
  * the kernel's page table.
@@ -429,3 +434,135 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+int mmap(uint64 unmapped_va){
+  struct proc *p = myproc();
+  uint64 start_addr;
+  uint64 end_addr;
+  int length;
+  int perm;
+  char *mem;
+
+  uint64 offset;
+
+  struct file *f;
+  int r=0;
+
+  // 这里是没有实际map的才会进到这里
+  for(int i=0;i<16;i++){
+    if(p->VMA[i].valid){
+      // printf("%d is valid\n",i);
+      start_addr = p->VMA[i].start_addr;
+      length = p->VMA[i].length;
+      end_addr = start_addr+length;
+      if(unmapped_va>=start_addr && unmapped_va<=end_addr){
+        // printf("unmapped_va %p in %d\n",unmapped_va,i);
+        f = p->ofile[p->VMA[i].fd];
+
+        mem =(char*) kalloc();
+        if(mem==0){
+          return -1;
+        }
+        memset(mem,0,PGSIZE);
+        offset = unmapped_va-start_addr;
+        offset = PGROUNDDOWN(offset);
+
+        ilock(f->ip);
+        if((r = readi(f->ip, 0,(uint64) mem, offset, PGSIZE)) > 0){
+          f->off += r;
+        }
+        iunlock(f->ip);
+
+        perm = (p->VMA[i].permission)<<1;
+
+
+        // printf("perm: %d\n",perm);
+        // printf("offset: %d\n",offset);
+
+        if(mappages(p->pagetable, PGROUNDDOWN(unmapped_va), PGSIZE, (uint64)mem, perm|PTE_U) != 0){
+          kfree(mem);
+          return -1;
+        }
+
+        // 如果上述都成功，那么就记录下来,父亲mapped++，儿子多一个结点
+        if (p->VMA[i].actually_mapped_cnt==0){
+          filedup(f); // 可能有问题，是全程加一次还是每次多一页都要加一次
+        }
+        p->VMA[i].actually_mapped_cnt++; //实际映射的又多了一页
+        // 加一个儿子vma
+        for(int j=0;j<16;j++){
+          if(p->VMA_mapped[j].valid==0){
+            p->VMA_mapped[j].valid = 1;
+            p->VMA_mapped[j].length = PGSIZE;
+            p->VMA_mapped[j].permission = p->VMA[i].permission;
+            p->VMA_mapped[j].fd = p->VMA[i].fd;
+            p->VMA_mapped[j].start_addr = PGROUNDDOWN(unmapped_va);
+            p->VMA_mapped[j].father_vma=i;
+            p->VMA_mapped[j].map_mode = p->VMA[i].map_mode;
+            break;
+          }
+        }
+        return 0;
+      }
+    }
+  }
+  
+  return -1; 
+}
+
+int 
+munmap(uint64 addr,int length){
+  // 假设这里addr是page-aligned
+  struct proc *p = myproc();
+    struct file *f;
+  // int find=0;
+  // first find if it is actually mapped.If not return directly.
+  // for(int i=0;i<16;i++){
+  //   if(p->VMA_mapped[i].valid && (addr>=p->VMA_mapped[i].start_addr) &&(addr<=(PGSIZE+p->VMA_mapped[i].start_addr))){
+  //     find = 1;
+  //     break;
+  //   }
+  // }
+  // if(find==0){
+  //   return 0;
+  // }
+  //if actually mapped -> unmap the page
+  uint64 top_addr = addr+length;
+  top_addr = PGROUNDDOWN(top_addr);
+  // addr = PGROUNDDOWN(addr); // 如果不是page-aligned，好像可以这样解决
+
+  uint64 temp;
+  while(addr != top_addr){
+    for(int i=0;i<16;i++){
+      // if this page is actually mapped
+      if(p->VMA_mapped[i].valid && (addr>=p->VMA_mapped[i].start_addr) &&(addr<(PGSIZE+p->VMA_mapped[i].start_addr))){
+        // the file that mapped
+        f = p->ofile[p->VMA_mapped[i].fd];
+        // write back to the file if MAP_SHARED
+        if(p->VMA_mapped[i].map_mode == MAP_SHARED){
+          temp = addr+PGSIZE;
+          filewrite(f,addr,PGROUNDDOWN(temp)-addr);
+        }
+        // uvmunmap
+        if(addr%PGSIZE!=0)
+          printf("**********************addr is not page-aligned\n");
+        uvmunmap(p->pagetable,PGROUNDDOWN(addr),1,1);//这里如果addr不是page-aligned的话可能出错
+        // clear VMA_mapped
+        p->VMA_mapped[i].valid = 0;
+        p->VMA[p->VMA_mapped[i].father_vma].actually_mapped_cnt--;
+        // if none has exist,drop the file reference
+        if(p->VMA[p->VMA_mapped[i].father_vma].actually_mapped_cnt == 0){
+          fileclose(f); //might be problem.close the file when 0
+        }
+        break;
+      }
+    }
+    temp = addr + PGSIZE;
+    addr = PGROUNDDOWN(temp);
+  }
+    
+
+  return 0;
+}
+
+

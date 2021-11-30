@@ -157,6 +157,9 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  for(int i=0;i<16;i++){
+    p->VMA[i].valid=0;
+  }
 }
 
 // Create a user page table for a given process,
@@ -344,6 +347,7 @@ exit(int status)
   if(p == initproc)
     panic("init exiting");
 
+  munmap(0,PGROUNDUP(p->sz));
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
     if(p->ofile[fd]){

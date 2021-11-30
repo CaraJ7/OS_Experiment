@@ -82,6 +82,17 @@ struct trapframe {
 
 enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct VMA_Record {
+  uint64  start_addr;
+  int length;
+  int permission;
+  int fd;
+  int valid; // 这一项现在有没有被占用
+  int actually_mapped_cnt; // 父亲使用
+  int map_mode;
+  int father_vma;// 儿子使用
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -103,4 +114,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct VMA_Record VMA[16];    // 这个是用来存mmap的地方，是全局的，不一定真的被map
+  struct VMA_Record VMA_mapped[16]; //这个是真的被map了的地方，通常就是存了一个页，用father_vma去找属于哪一个mmap
 };
