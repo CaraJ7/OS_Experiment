@@ -180,3 +180,34 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+int 
+file_write_mmap(struct file *f, uint64 va, int n , uint64 file_offset)
+{
+  int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+  int i = 0;
+  int r=0;
+  int ret;
+  while(i < n){
+    int n1 = n - i;
+    if(n1 > max)
+      n1 = max;
+
+    begin_op();
+    ilock(f->ip);
+    if ((r=(writei(f->ip, 1, va + i, file_offset, n1))) >0){
+      file_offset+=r;
+    }
+    iunlock(f->ip);
+    end_op();
+
+    if(r != n1){
+      printf("WRONG WRITING IN file_write_mmap\n");
+      // error from writei
+      break;
+    }
+    i += r;
+  }
+  ret = (i == n ? n : -1);
+  return ret;
+
+}

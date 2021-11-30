@@ -184,8 +184,11 @@ mmap_test(void)
     char b;
     if (read(fd, &b, 1) != 1)
       err("read (1)");
-    if (b != 'Z')
+    if (b != 'Z'){
+      printf("i is %d\n",i);
       err("file does not contain modifications");
+    }
+
   }
   if (close(fd) == -1)
     err("close");
@@ -275,7 +278,9 @@ fork_test(void)
   if((pid = fork()) < 0)
     err("fork");
   if (pid == 0) {
+    printf("pid is 0!\n");
     _v1(p1);
+    printf("pass p1\n");
     munmap(p1, PGSIZE); // just the first page
     exit(0); // tell the parent that the mapping looks OK.
   }
@@ -284,6 +289,7 @@ fork_test(void)
   wait(&status);
 
   if(status != 0){
+    printf("ststus is %d\n",status);
     printf("fork_test failed\n");
     exit(1);
   }

@@ -160,6 +160,9 @@ freeproc(struct proc *p)
   for(int i=0;i<16;i++){
     p->VMA[i].valid=0;
   }
+  for(int i=0;i<16;i++){
+    p->VMA_mapped[i].valid=0;
+  }
 }
 
 // Create a user page table for a given process,
@@ -277,8 +280,24 @@ fork(void)
     return -1;
   }
 
+  for(int j=0;j<16;j++){
+    if(p->VMA[j].valid){
+      np->VMA[j].fp        = p->VMA[j].fp        ;
+      np->VMA[j].length    = p->VMA[j].length    ;
+      np->VMA[j].map_mode  = p->VMA[j].map_mode  ;
+      np->VMA[j].length    = p->VMA[j].length    ;
+      np->VMA[j].permission = p->VMA[j].permission;
+      np->VMA[j].valid = 1;
+      np->VMA[j].start_addr = p->VMA[j].start_addr;
+      np->VMA[j].actually_mapped_cnt=0;
+      filedup(np->VMA[j].fp);
+      continue;
+    }
+    np->VMA[j].valid = 0;
+  }
+
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy(p,p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;

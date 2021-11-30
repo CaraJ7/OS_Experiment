@@ -87,6 +87,7 @@ struct VMA_Record {
   int length;
   int permission;
   int fd;
+  struct file* fp; // 应该是存这个fp而不是存fd，因为正常文件关了的时候(sys_close)，fd对应的文件指针就没了。这指导书纯搁这忽悠。。。
   int valid; // 这一项现在有没有被占用
   int actually_mapped_cnt; // 父亲使用
   int map_mode;

@@ -176,8 +176,12 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
-    if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+    if((*pte & PTE_V) == 0){
+      // panic("uvmunmap: not mapped");
+      // printf("uvmunmap: not mapped\n");//lazy
+      continue;
+    }
+
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -300,18 +304,34 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
 int
-uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+uvmcopy(struct proc *p,pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, i;
   uint flags;
   char *mem;
+  int find_map=0;
 
   for(i = 0; i < sz; i += PGSIZE){
+    find_map=0;
+    for(int j=0;j<16;j++){
+      if(p->VMA[j].valid && i>=p->VMA[j].start_addr && i<(p->VMA[j].start_addr+p->VMA[j].length))
+      {
+        find_map=1;
+        break;
+      }
+    }
+    if(find_map){
+      continue;
+    }
+
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+    if((*pte & PTE_V) == 0){
+      // panic("uvmcopy: page not present");
+      // printf("uvmcopy: page not present\n");//lazy
+      continue;
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -455,9 +475,11 @@ int mmap(uint64 unmapped_va){
       start_addr = p->VMA[i].start_addr;
       length = p->VMA[i].length;
       end_addr = start_addr+length;
-      if(unmapped_va>=start_addr && unmapped_va<=end_addr){
+      if(unmapped_va>=start_addr && unmapped_va<end_addr){
         // printf("unmapped_va %p in %d\n",unmapped_va,i);
-        f = p->ofile[p->VMA[i].fd];
+
+        // f = p->ofile[p->VMA[i].fd];
+        f = p->VMA[i].fp;
 
         mem =(char*) kalloc();
         if(mem==0){
@@ -484,10 +506,10 @@ int mmap(uint64 unmapped_va){
           return -1;
         }
 
-        // 如果上述都成功，那么就记录下来,父亲mapped++，儿子多一个结点
-        if (p->VMA[i].actually_mapped_cnt==0){
-          filedup(f); // 可能有问题，是全程加一次还是每次多一页都要加一次
-        }
+        // // 如果上述都成功，那么就记录下来,父亲mapped++，儿子多一个结点
+        // if (p->VMA[i].actually_mapped_cnt==0){
+        //   filedup(f); // 可能有问题，是全程加一次还是每次多一页都要加一次
+        // }
         p->VMA[i].actually_mapped_cnt++; //实际映射的又多了一页
         // 加一个儿子vma
         for(int j=0;j<16;j++){
@@ -496,6 +518,7 @@ int mmap(uint64 unmapped_va){
             p->VMA_mapped[j].length = PGSIZE;
             p->VMA_mapped[j].permission = p->VMA[i].permission;
             p->VMA_mapped[j].fd = p->VMA[i].fd;
+            p->VMA_mapped[j].fp = p->VMA[i].fp;
             p->VMA_mapped[j].start_addr = PGROUNDDOWN(unmapped_va);
             p->VMA_mapped[j].father_vma=i;
             p->VMA_mapped[j].map_mode = p->VMA[i].map_mode;
@@ -514,21 +537,11 @@ int
 munmap(uint64 addr,int length){
   // 假设这里addr是page-aligned
   struct proc *p = myproc();
-    struct file *f;
-  // int find=0;
-  // first find if it is actually mapped.If not return directly.
-  // for(int i=0;i<16;i++){
-  //   if(p->VMA_mapped[i].valid && (addr>=p->VMA_mapped[i].start_addr) &&(addr<=(PGSIZE+p->VMA_mapped[i].start_addr))){
-  //     find = 1;
-  //     break;
-  //   }
-  // }
-  // if(find==0){
-  //   return 0;
-  // }
+  struct file *f;
+
   //if actually mapped -> unmap the page
   uint64 top_addr = addr+length;
-  top_addr = PGROUNDDOWN(top_addr);
+  top_addr = PGROUNDUP(top_addr); //可能有问题，是up还是down要再看一下
   // addr = PGROUNDDOWN(addr); // 如果不是page-aligned，好像可以这样解决
 
   uint64 temp;
@@ -537,22 +550,26 @@ munmap(uint64 addr,int length){
       // if this page is actually mapped
       if(p->VMA_mapped[i].valid && (addr>=p->VMA_mapped[i].start_addr) &&(addr<(PGSIZE+p->VMA_mapped[i].start_addr))){
         // the file that mapped
-        f = p->ofile[p->VMA_mapped[i].fd];
+        // f = p->ofile[p->VMA_mapped[i].fd];
+        f = p->VMA_mapped[i].fp;
         // write back to the file if MAP_SHARED
         if(p->VMA_mapped[i].map_mode == MAP_SHARED){
           temp = addr+PGSIZE;
-          filewrite(f,addr,PGROUNDDOWN(temp)-addr);
+          file_write_mmap(f,addr,PGROUNDDOWN(temp)-addr,addr-p->VMA[p->VMA_mapped[i].father_vma].start_addr);
         }
         // uvmunmap
         if(addr%PGSIZE!=0)
           printf("**********************addr is not page-aligned\n");
-        uvmunmap(p->pagetable,PGROUNDDOWN(addr),1,1);//这里如果addr不是page-aligned的话可能出错
+        // uvmunmap(p->pagetable,PGROUNDDOWN(addr),1,1);//这里如果addr不是page-aligned的话可能出错
+        uvmunmap(p->pagetable,p->VMA_mapped[i].start_addr,1,1);
         // clear VMA_mapped
         p->VMA_mapped[i].valid = 0;
         p->VMA[p->VMA_mapped[i].father_vma].actually_mapped_cnt--;
         // if none has exist,drop the file reference
         if(p->VMA[p->VMA_mapped[i].father_vma].actually_mapped_cnt == 0){
+          p->VMA[p->VMA_mapped[i].father_vma].valid=0;
           fileclose(f); //might be problem.close the file when 0
+          // printf("fd is %d\nf is %p\n",p->VMA_mapped[i].fd,f);
         }
         break;
       }

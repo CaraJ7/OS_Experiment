@@ -127,6 +127,7 @@ uint64 sys_mmap(){
   p->sz = addr+length;
 
   f = p->ofile[fd];
+  filedup(f); // 这里就要加，否则可能文件直接就没了
   // ReadonlyFile+MapShared+PROT_WRITE
   // 只读文件 不可shared还是在写,返回错误
   if((!f->writable)&&(map_mode==MAP_SHARED)&&(permission&PROT_WRITE)){
@@ -139,6 +140,7 @@ uint64 sys_mmap(){
       p->VMA[i].length = length;
       p->VMA[i].permission = permission;
       p->VMA[i].fd = fd;
+      p->VMA[i].fp = f;// 要存这个，要不然一关文件，fd就没了
       p->VMA[i].start_addr = addr;
       p->VMA[i].actually_mapped_cnt=0;
       p->VMA[i].map_mode = map_mode;
