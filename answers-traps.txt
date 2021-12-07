@@ -5,6 +5,6 @@
 		call to function g: address 0x14
 	Q3:	0x630
 	Q4:	0x30
-	Q5:	i should be 726c6400.
-		No, 57616 should not be changed.
+	Q5:	i should be 0x726c6400.
+		No, 57616 should not be changed because whether or not RISC-V is little- or big-endian, when we need to print the number, it should always be that number. 
 	Q6:	the value in the rigister a2. Because the value of argument 2 is not specified. 
