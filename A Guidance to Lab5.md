@@ -10,7 +10,7 @@
 
 开始讲处理方法。检测`r_scause`为13或15的时候，进入`lazy_compensation`函数，检测到底这个page fault是不是由lazy allocation导致的（不能导致的原因包括：访问的va大于进程的sz，va是栈的保护页，va大于MAXVA），如果不是，那么我们就要给他需要用的那一页加一个page，即用`uvmalloc`在对应的位置加一个页。这就做完了。非常简单，已经可以正常运行echo hi了。
 
-还有一些小地方需要加一加，比如`uvmunmap`的时候其实是按照页表一个一个页读的，如果有一些没有用到的页，也即没有实际分配地址的页，那么如果不改就会unmap，因为`uvmunmap`是要求mapping必须存在的。
+还有一些小地方需要改一下，比如`uvmunmap`的时候其实是按照页表一个一个页读的，如果有一些没有用到的页，也即没有实际分配地址的页，那么如果不改就会unmap，因为`uvmunmap`是要求mapping必须存在的，所以要把`uvmunmap`的walk和unmap的panic注释掉，这两种panic在lazy allocation的时候都有可能出现，unmap会出现很好理解：进程的sz很大，但是里面的很多页都没有被分配，由于`uvmunmap`是一页一页去做unmap，所以找到这种页的时候就会激发unmap的panic；walk这种panic的出现是因为某一级页表都没有找到，连找到这一页对应的页表都还没有被分配。
 
 ### 3.Lazytests and Usertests
 
