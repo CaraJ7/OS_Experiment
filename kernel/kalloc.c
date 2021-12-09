@@ -57,12 +57,12 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
+  unset_pagecounter((uint64)pa);
+
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
-
-  unset_pagecounter((uint64)pa);
 
 }
 
