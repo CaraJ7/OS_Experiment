@@ -5,6 +5,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
 
 /*
  * the kernel's page table.
@@ -17,7 +18,11 @@ extern char trampoline[]; // trampoline.S
 
 //存储大小为RAM中的最大页的数目，静态变量应该初始化为0.
 // 可能需要加锁？
-int page_counter[(PHYSTOP-KERNBASE)>>12];
+struct{
+  int page_counter[(PHYSTOP-KERNBASE)>>12];
+  struct spinlock lock;
+} pc;
+
 /*
  * create a direct-map page table for the kernel.
  */
@@ -511,9 +516,18 @@ judge_cow(pagetable_t pagetable,uint64 va){
 */
 
 // 不放心，初始化都为0，只在开始的时候执行一次
+
+void
+init_pc_lock(void){
+  initlock(&pc.lock, "page counter");
+  return;
+}
+
 void
 init_pagecounter(void){
-  memset(page_counter,0,sizeof(int)*((PHYSTOP-KERNBASE)>>12));
+  acquire(&pc.lock);
+  memset(pc.page_counter,0,sizeof(int)*((PHYSTOP-KERNBASE)>>12));
+  release(&pc.lock);
   return;
 }
 
@@ -521,21 +535,42 @@ init_pagecounter(void){
 // but usually it will be
 void
 increase_pagecounter(uint64 pa){
-  page_counter[PA2INDEX(pa)]++;
+  acquire(&pc.lock);
+  pc.page_counter[PA2INDEX(pa)]++;
+  release(&pc.lock);
   return;
 }
 
 // pa need not to be page-aligned
 // but usually it will be
+  // more strict implementation
+// void
+// decrease_pagecounter(uint64 pa){
+//   acquire(&pc.lock);
+//   pc.page_counter[PA2INDEX(pa)]--;
+//   if(pc.page_counter[PA2INDEX(pa)]<0){
+//     printf("wrong!\n");
+//     panic("decrease_pagecounter: should not below 0");
+//     // return;
+//   }
+//   release(&pc.lock);
+//   if(pc.page_counter[PA2INDEX(pa)] == 0){
+//     kfree((void*)pa);
+//   }
+//   return;
+// }
+
+  // looser implementation
 void
 decrease_pagecounter(uint64 pa){
-  page_counter[PA2INDEX(pa)]--;
-  if(page_counter[PA2INDEX(pa)]<0){
-    panic("decrease_pagecounter: should not below 0");
-    // return;
-  }
-  if(page_counter[PA2INDEX(pa)] == 0){
+  acquire(&pc.lock);
+  pc.page_counter[PA2INDEX(pa)]--;
+  if(pc.page_counter[PA2INDEX(pa)] <= 0){
+    release(&pc.lock);
     kfree((void*)pa);
+  }
+  else{
+    release(&pc.lock);
   }
   return;
 }
@@ -543,7 +578,9 @@ decrease_pagecounter(uint64 pa){
 // 设置pa对应的index为0
 void
 unset_pagecounter(uint64 pa){
-  page_counter[PA2INDEX(pa)] = 0;
+  acquire(&pc.lock);
+  pc.page_counter[PA2INDEX(pa)] = 0;
+  release(&pc.lock);
   return;
 }
 
